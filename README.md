@@ -38,7 +38,7 @@ around. Cloud assistants want your documents. MACman is neither:
 
 Inspired by [FaceTimeOS](https://github.com/dylanelu/FaceTimeOS) (1st place,
 Cal Hacks 12.0), rebuilt with different engineering priorities — see
-[DESIGN.md](DESIGN.md) for the specific differences.
+[DESIGN.md](docs/DESIGN.md) for the specific differences.
 
 ---
 
@@ -52,10 +52,10 @@ Cal Hacks 12.0), rebuilt with different engineering priorities — see
 | **Personal** | Mail (read + draft) · Calendar · Notes · Reminders |
 | **Developer** | open projects in VS Code · hand coding tasks to Claude Code |
 
-Full list with the phrasings that work: **[COMMANDS.md](COMMANDS.md)**
+Full list with the phrasings that work: **[COMMANDS.md](docs/COMMANDS.md)**
 
 **18 primitives. 99% tool-selection accuracy**, measured over 105 trials —
-[RELIABILITY.md](RELIABILITY.md) has every number and the method.
+[RELIABILITY.md](docs/RELIABILITY.md) has every number and the method.
 
 ---
 
@@ -89,7 +89,7 @@ self-tests. Then:
 ```
 
 Text your Apple ID from your phone. **Step-by-step with expected output at
-every stage: [TESTING.md](TESTING.md)**
+every stage: [TESTING.md](docs/TESTING.md)**
 
 ---
 
@@ -112,7 +112,7 @@ boundaries are worth stating plainly.
 - **Every tool call is logged** to an append-only audit file.
 - **One command turns everything off**: `scripts/revoke_all.py --revoke`
 
-More detail: [DESIGN.md](DESIGN.md) §6.
+More detail: [DESIGN.md](docs/DESIGN.md) §6.
 
 ---
 
@@ -141,13 +141,12 @@ used. A wrong click isn't a wrong answer — it presses something.
 
 | | |
 |---|---|
-| [TESTING.md](TESTING.md) | Set up and verify everything, step by step |
-| [COMMANDS.md](COMMANDS.md) | Everything it can do, and how to ask |
-| [RELIABILITY.md](RELIABILITY.md) | Every measurement, with the method |
-| [CAPABILITY.md](CAPABILITY.md) | Architecture, and the free/paid boundary |
-| [DESIGN.md](DESIGN.md) | Why it's built this way |
-| [ROADMAP.md](ROADMAP.md) | What's done, what's next |
-| [START_HERE.md](START_HERE.md) | Plain-English overview |
+| [TESTING.md](docs/TESTING.md) | Set up and verify everything, step by step |
+| [COMMANDS.md](docs/COMMANDS.md) | Everything it can do, and how to ask |
+| [RELIABILITY.md](docs/RELIABILITY.md) | Every measurement, with the method |
+| [CAPABILITY.md](docs/CAPABILITY.md) | Architecture, and the free/paid boundary |
+| [DESIGN.md](docs/DESIGN.md) | Why it's built this way |
+| [ROADMAP.md](docs/ROADMAP.md) | What's done, what's next |
 
 ---
 
@@ -162,4 +161,4 @@ API key has been configured on the development machine, so its cost and
 latency are unmeasured. Said plainly rather than glossed.
 
 MIT licensed. Contributions welcome, especially measurements that contradict
-the ones in [RELIABILITY.md](RELIABILITY.md).
+the ones in [RELIABILITY.md](docs/RELIABILITY.md).

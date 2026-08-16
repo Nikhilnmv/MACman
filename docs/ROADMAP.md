@@ -5,8 +5,7 @@ What's built, what's next, and who does each part.
 What it can do today: [COMMANDS.md](COMMANDS.md).
 Measured reliability: [RELIABILITY.md](RELIABILITY.md).
 Architecture and the free/paid line: [CAPABILITY.md](CAPABILITY.md).
-Design rationale: [DESIGN.md](DESIGN.md). Your checklist:
-[MANUAL_TASKS.md](MANUAL_TASKS.md). Confused? [START_HERE.md](START_HERE.md).
+Design rationale: [DESIGN.md](DESIGN.md).  
 
 **Legend:** 🤖 I build it · 👤 you do it · ✅ done · ⏸ blocked · ⬜ not started
 
