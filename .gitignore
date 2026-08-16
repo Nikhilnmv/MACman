@@ -1,0 +1,25 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Swift
+helpers/.build/
+*.dSYM/
+
+# Test artefacts (contain output from your own Mac)
+tests/tasks/*.log
+tests/tasks/baseline.json
+tests/tasks/locked.json
+/tmp/
+
+# macOS
+.DS_Store

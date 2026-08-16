@@ -1,0 +1,42 @@
+[project]
+name = "macman"
+version = "0.1.0"
+description = "Call or text your Mac, tell it what you need out loud, watch it work."
+requires-python = ">=3.11"
+
+dependencies = [
+    "anthropic>=0.69",
+    # Accessibility, session lock state, and screen APIs. These replace the
+    # macman-state / macman-ax Swift helpers: the underlying APIs are plain C
+    # and bridge cleanly, so a compile step buys nothing here. Swift is still
+    # used for Core Audio taps, Speech, ScreenCaptureKit, and FoundationModels.
+    "pyobjc-core>=10.3",
+    "pyobjc-framework-Cocoa>=10.3",
+    "pyobjc-framework-Quartz>=10.3",
+    "pyobjc-framework-ApplicationServices>=10.3",
+    "pyotp>=2.9",          # TOTP session auth (DESIGN.md §6.2)
+    "keyring>=25.0",       # TOTP secret in the macOS Keychain, never on disk
+]
+
+[project.optional-dependencies]
+voice = [
+    "sounddevice>=0.4",
+    "numpy>=1.26",
+    "silero-vad>=5.1",
+]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+macman = "macman.main:main"
+macman-preflight = "macman.preflight:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["macman*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
