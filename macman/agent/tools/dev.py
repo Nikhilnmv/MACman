@@ -35,7 +35,7 @@ import shlex
 import shutil
 from pathlib import Path
 
-from anthropic.lib.tools import beta_tool
+from macman.agent.tools.schema import tool
 
 from macman.agent.tools import shell as shell_tool
 from macman.agent.tools.registry import _guarded, require_confirmation
@@ -62,7 +62,7 @@ def _vscode_cli() -> str | None:
     return str(bundled) if bundled.exists() else None
 
 
-@beta_tool
+@tool
 def vscode_control(action: str, path: str = "", line: int = 0) -> str:
     """Open a project or file in VS Code.
 
@@ -106,7 +106,7 @@ def vscode_control(action: str, path: str = "", line: int = 0) -> str:
     return _guarded("bash", {"vscode_control": action, "path": path}, run)
 
 
-@beta_tool
+@tool
 def claude_code(task: str, project: str = "") -> str:
     """Hand a coding task to Claude Code, which does the work itself.
 

@@ -27,7 +27,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from anthropic.lib.tools import beta_tool
+from macman.agent.tools.schema import tool
 
 from macman.agent.tools import shell as shell_tool
 from macman.agent.tools.registry import _guarded, require_confirmation
@@ -57,7 +57,7 @@ _SYSTEM_ACTIONS = {
 }
 
 
-@beta_tool
+@tool
 def system_control(action: str, value: int = -1, name: str = "") -> str:
     """Control this Mac: lock, sleep, volume, brightness, Wi-Fi, Bluetooth.
 
@@ -224,7 +224,7 @@ def _network_action(key: str, name: str = "") -> str:
 # --------------------------------------------------------------------------- #
 
 
-@beta_tool
+@tool
 def file_operation(action: str, source: str, destination: str = "") -> str:
     """Move, copy, rename, trash, compress files, or create a folder.
 

@@ -25,7 +25,7 @@ from __future__ import annotations
 import shlex
 from pathlib import Path
 
-from anthropic.lib.tools import beta_tool
+from macman.agent.tools.schema import tool
 
 from macman import config
 from macman.agent.tools import shell as shell_tool
@@ -74,7 +74,7 @@ def _describe_rows(rows: list[str], what: str, where: Path) -> str:
 # --------------------------------------------------------------------------- #
 
 
-@beta_tool
+@tool
 def list_folder(folder: str, limit: int = 50) -> str:
     """List the files and folders inside a folder on this Mac.
 
@@ -95,7 +95,7 @@ def list_folder(folder: str, limit: int = 50) -> str:
     return _guarded("bash", {"list_folder": folder}, run)
 
 
-@beta_tool
+@tool
 def count_files(folder: str, extension: str = "") -> str:
     """Count files in a folder, optionally only those with one extension.
 
@@ -123,7 +123,7 @@ def count_files(folder: str, extension: str = "") -> str:
     return _guarded("bash", {"count_files": folder, "extension": extension}, run)
 
 
-@beta_tool
+@tool
 def find_files(folder: str, name_contains: str, limit: int = 50) -> str:
     """Find files whose name contains some text, searching subfolders too.
 
@@ -152,7 +152,7 @@ def find_files(folder: str, name_contains: str, limit: int = 50) -> str:
     return _guarded("bash", {"find_files": folder, "contains": name_contains}, run)
 
 
-@beta_tool
+@tool
 def read_file(path: str, max_lines: int = 100) -> str:
     """Read the beginning of a text file on this Mac.
 
@@ -203,7 +203,7 @@ _SYSTEM_FACTS = {
 }
 
 
-@beta_tool
+@tool
 def system_info(fact: str) -> str:
     """Look up a fact about this Mac.
 
@@ -223,7 +223,7 @@ def system_info(fact: str) -> str:
     return _guarded("bash", {"system_info": fact}, run)
 
 
-@beta_tool
+@tool
 def open_app(name: str) -> str:
     """Open an application on this Mac.
 
@@ -254,7 +254,7 @@ _APP_QUERIES = {
 }
 
 
-@beta_tool
+@tool
 def app_info(query: str) -> str:
     """Ask a Mac app for information.
 

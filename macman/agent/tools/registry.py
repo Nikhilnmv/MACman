@@ -22,7 +22,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from anthropic.lib.tools import beta_tool
+from macman.agent.tools.schema import tool
 
 from macman.agent import guard
 from macman.agent.tools import applescript as applescript_tool
@@ -133,7 +133,7 @@ def _guarded(tool: str, args: dict[str, Any], run: Callable[[], Any]) -> Any:
 # --------------------------------------------------------------------------- #
 
 
-@beta_tool
+@tool
 def bash(command: str, timeout: int = 60) -> str:
     """Run a shell command on the Mac with zsh and return its combined output.
 
@@ -152,7 +152,7 @@ def bash(command: str, timeout: int = 60) -> str:
     )
 
 
-@beta_tool
+@tool
 def applescript(script: str, javascript: bool = False) -> str:
     """Run an AppleScript (or JavaScript for Automation) script.
 
@@ -174,7 +174,7 @@ def applescript(script: str, javascript: bool = False) -> str:
     )
 
 
-@beta_tool
+@tool
 def ui_query(app: str, interactive_only: bool = True, max_depth: int = 8) -> str:
     """Read an app's Accessibility tree as JSON, so you can see its interface as text.
 
@@ -197,7 +197,7 @@ def ui_query(app: str, interactive_only: bool = True, max_depth: int = 8) -> str
     )
 
 
-@beta_tool
+@tool
 def ui_find(app: str, role: str = "", label: str = "") -> str:
     """Find elements in an app's interface by role and/or label text.
 
@@ -225,7 +225,7 @@ def ui_find(app: str, role: str = "", label: str = "") -> str:
     return _guarded("ui_query", {"app": app, "role": role, "label": label}, run)
 
 
-@beta_tool
+@tool
 def ui_press(app: str, path: str) -> str:
     """Press a UI element identified by the path from `ui_find` or `ui_query`.
 
@@ -241,7 +241,7 @@ def ui_press(app: str, path: str) -> str:
                     lambda: ui_tool.press(app, path))
 
 
-@beta_tool
+@tool
 def ui_set_value(app: str, path: str, value: str) -> str:
     """Set a UI element's value directly, without synthesising keystrokes.
 

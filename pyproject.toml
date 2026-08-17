@@ -4,8 +4,12 @@ version = "0.1.0"
 description = "Call or text your Mac, tell it what you need out loud, watch it work."
 requires-python = ">=3.11"
 
+# The free, on-device tier needs only these. `anthropic` is deliberately NOT
+# here: it is required solely by the cloud engine, and pulling it in as a base
+# dependency dragged up to 40 transitive packages (boto3, botocore, aiohttp)
+# into an install whose whole pitch is working offline with no API key. Every
+# dependency inherits MACman's permissions, so each one is supply-chain surface.
 dependencies = [
-    "anthropic>=0.69",
     # Accessibility, session lock state, and screen APIs. These replace the
     # macman-state / macman-ax Swift helpers: the underlying APIs are plain C
     # and bridge cleanly, so a compile step buys nothing here. Swift is still
@@ -19,6 +23,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Only needed for the Claude tier: vision, unscriptable apps, code reasoning.
+cloud = ["anthropic>=0.69"]
 voice = [
     "sounddevice>=0.4",
     "numpy>=1.26",

@@ -259,6 +259,29 @@ Re-run it yourself:
 .venv/bin/python tests/audit/network.py
 ```
 
+## Dependency surface — audited
+
+Every Python package inherits whatever permissions MACman holds, up to Full
+Disk Access, so the install list is security surface rather than a convenience
+question.
+
+| | Packages |
+|---|---|
+| Free, on-device tier | **17** |
+| With the Claude tier (`[cloud]`) | 35 |
+
+**The finding:** the free tier was importing the Anthropic SDK purely for a
+`@beta_tool` decorator that turns a docstring into a JSON schema. That single
+import dragged in up to 40 transitive packages — `boto3`, `botocore`,
+`aiohttp` among them — into a tool whose entire pitch is running offline with
+no API key.
+
+Replaced with a 150-line local decorator (`agent/tools/schema.py`) producing
+byte-identical schemas. Verified by blocking `anthropic` at import and
+confirming all 18 tools, the local engine and the router still load.
+
+`anthropic` is now an optional extra, needed only by the cloud engine.
+
 ## Model quirks worth knowing
 
 **Spurious refusals — ~1 in 4, text-only.** Benign requests declined with

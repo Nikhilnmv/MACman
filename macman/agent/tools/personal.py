@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from anthropic.lib.tools import beta_tool
+from macman.agent.tools.schema import tool
 
 from macman.agent.tools.applescript import run as run_applescript
 from macman.agent.tools.registry import _guarded, require_confirmation
@@ -74,7 +74,7 @@ def _parse_when(raw: str) -> datetime | None:
 # --------------------------------------------------------------------------- #
 
 
-@beta_tool
+@tool
 def mail_control(action: str, to: str = "", subject: str = "", body: str = "") -> str:
     """Read your inbox or compose an email draft in Mail.
 
@@ -137,7 +137,7 @@ def mail_control(action: str, to: str = "", subject: str = "", body: str = "") -
 # --------------------------------------------------------------------------- #
 
 
-@beta_tool
+@tool
 def calendar_control(action: str, title: str = "", when: str = "",
                      duration_minutes: int = 60) -> str:
     """See what's on your calendar, or add an event.
@@ -214,7 +214,7 @@ def calendar_control(action: str, title: str = "", when: str = "",
 # --------------------------------------------------------------------------- #
 
 
-@beta_tool
+@tool
 def notes_control(action: str, title: str = "", body: str = "") -> str:
     """Read, search or create notes in the Notes app.
 
@@ -278,7 +278,7 @@ def notes_control(action: str, title: str = "", body: str = "") -> str:
 # --------------------------------------------------------------------------- #
 
 
-@beta_tool
+@tool
 def reminders_control(action: str, title: str = "", when: str = "") -> str:
     """See your reminders, add one, or mark one done.
 

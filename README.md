@@ -67,8 +67,12 @@ Full list with the phrasings that work: **[COMMANDS.md](docs/COMMANDS.md)**
   *devices*, so you need something other than the Mac itself.
 - **Xcode** to build the Swift helper *(Command Line Tools alone is not enough
   — Apple's tool-calling macros ship only with full Xcode)*
-- Optional: an [Anthropic API key](https://console.anthropic.com) for the
-  Claude tier
+- Optional: an [Anthropic API key](https://console.anthropic.com) and
+  `pip install '.[cloud]'` for the Claude tier
+
+A one-line `brew install` is planned — see
+[packaging/README.md](packaging/README.md). It needs the repo to be public,
+since Homebrew fetches a public tarball.
 
 ---
 
@@ -77,7 +81,7 @@ Full list with the phrasings that work: **[COMMANDS.md](docs/COMMANDS.md)**
 ```bash
 git clone git@github.com:Nikhilnmv/MACman.git
 cd MACman
-python3 -m venv .venv && .venv/bin/pip install -e .
+python3 -m venv .venv && .venv/bin/pip install -e .   # 17 packages, no cloud SDK
 cd helpers && swift build -c release -Xswiftc -DMACMAN_TOOLS && cd ..
 .venv/bin/python -m macman.main setup
 ```

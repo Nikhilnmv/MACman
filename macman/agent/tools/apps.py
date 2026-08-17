@@ -22,7 +22,7 @@ from __future__ import annotations
 import shlex
 from pathlib import Path
 
-from anthropic.lib.tools import beta_tool
+from macman.agent.tools.schema import tool
 
 from macman.agent.tools import shell as shell_tool
 from macman.agent.tools.applescript import run as run_applescript
@@ -70,7 +70,7 @@ def _media_app(preferred: str = "") -> str | None:
     return next((a for a in _MEDIA_APPS if _app_installed(a)), None)
 
 
-@beta_tool
+@tool
 def media_control(action: str, app: str = "", query: str = "") -> str:
     """Control music playback in Spotify or Apple Music.
 
@@ -145,7 +145,7 @@ def _browser(preferred: str = "") -> str | None:
             or next((b for b in _BROWSERS if _app_installed(b)), None))
 
 
-@beta_tool
+@tool
 def browser_control(action: str, target: str = "", browser: str = "") -> str:
     """Open pages, search the web, or read the current page in a browser.
 
@@ -227,7 +227,7 @@ def browser_control(action: str, target: str = "", browser: str = "") -> str:
 _DOC_APPS = {"pages": "Pages", "numbers": "Numbers", "keynote": "Keynote"}
 
 
-@beta_tool
+@tool
 def document_control(action: str, path: str = "", app: str = "") -> str:
     """Open, read or export Pages, Numbers and Keynote documents.
 
@@ -316,7 +316,7 @@ def document_control(action: str, path: str = "", app: str = "") -> str:
 # --------------------------------------------------------------------------- #
 
 
-@beta_tool
+@tool
 def run_shortcut(action: str, name: str = "", input_path: str = "") -> str:
     """List or run a macOS Shortcut.
 
