@@ -51,6 +51,7 @@ Cal Hacks 12.0), rebuilt with different engineering priorities — see
 | **Apps** | open anything · Music & Spotify · browsers · Pages, Numbers, Keynote |
 | **Personal** | Mail (read + draft) · Calendar · Notes · Reminders |
 | **Developer** | open projects in VS Code · hand coding tasks to Claude Code |
+| **Voice** | talk to your Mac and it talks back — on-device, offline |
 
 Full list with the phrasings that work: **[COMMANDS.md](docs/COMMANDS.md)**
 
@@ -90,6 +91,15 @@ self-tests. Then:
 
 Text your Apple ID from your phone. **Step-by-step with expected output at
 every stage: [TESTING.md](docs/TESTING.md)**
+
+Or talk to it directly, no phone needed:
+
+```bash
+.venv/bin/python -m macman.main voice
+```
+
+Transcription and speech both run on-device — nothing is uploaded, and it works
+with no network.
 
 ---
 
@@ -154,11 +164,20 @@ used. A wrong click isn't a wrong answer — it presses something.
 
 **Working:** iMessage control, 18 primitives, on-device engine, security model.
 
-**Not built yet:** FaceTime voice control (v3), a signed menu-bar app (v4).
+**Voice works locally** — `macman voice` listens, acts and answers aloud using
+Apple's on-device speech, entirely offline.
 
-**Untested:** the Claude tier. It's implemented but has never run — no valid
-API key has been configured on the development machine, so its cost and
-latency are unmeasured. Said plainly rather than glossed.
+**Not built yet:** FaceTime calling (the remaining half of v3), a signed
+menu-bar app (v4).
+
+**Claude Code handoff (Level 3) works**, verified — `claude_code` calls the
+`claude` CLI, which authenticates with a Claude Pro/Max subscription. No
+metered API key needed for coding tasks handed to Claude Code.
+
+**The direct Claude API (Level 4 — vision, cross-app orchestration, the
+`engines/cloud.py` fallback) is still untested.** The Messages API is metered
+separately from a Pro/Max subscription and needs a funded `sk-ant-...` key;
+none has been configured, so its cost and latency remain unmeasured.
 
 MIT licensed. Contributions welcome, especially measurements that contradict
 the ones in [RELIABILITY.md](docs/RELIABILITY.md).

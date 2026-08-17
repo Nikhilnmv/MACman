@@ -205,6 +205,10 @@ def main() -> int:
     p_serve.add_argument("--dry-run", action="store_true",
                          help="exercise the full channel without calling an engine")
 
+    p_voice = sub.add_parser("voice", help="talk to your Mac out loud")
+    p_voice.add_argument("--output-device", default=None,
+                         help="speak through this device, e.g. 'BlackHole 2ch'")
+
     for name, help_text in (("route", "show the routing decision without running"),
                             ("run", "execute one task")):
         p = sub.add_parser(name, help=help_text)
@@ -229,6 +233,18 @@ def main() -> int:
         from macman import setup
 
         return setup.main()
+
+    if args.command == "voice":
+        from macman.voice import session as voice_session
+
+        return voice_session.main(output_device=args.output_device)
+
+    if args.command == "voice":
+        # Imported lazily: the voice stack pulls in the speech helper, which
+        # the other commands never need.
+        from macman.voice import session as voice_session
+
+        return voice_session.main(output_device=args.output_device)
 
     if args.command == "serve":
         # Imported lazily: the daemon pulls in the channel stack, which the

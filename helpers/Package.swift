@@ -11,5 +11,6 @@ let package = Package(
         .executableTarget(name: "macman-state", path: "Sources/macman-state"),
         .executableTarget(name: "macman-ax", path: "Sources/macman-ax"),
         .executableTarget(name: "macman-local", path: "Sources/macman-local"),
+        .executableTarget(name: "macman-speech", path: "Sources/macman-speech"),
     ]
 )

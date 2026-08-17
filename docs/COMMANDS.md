@@ -95,8 +95,8 @@ waiting, so an unanswered prompt never stalls a session.
 |---|---|
 | *"Open my MACMan project in VS Code"* | ✅ |
 | *"Open app.py at line 42"* | ✅ |
-| *"Fix the failing test in my project"* | ⏸ needs a working `claude` CLI |
-| *"Ask Claude to explain this error"* | ⏸ needs a working `claude` CLI |
+| *"Fix the failing test in my project"* | ✅ uses your Claude subscription, not a metered key |
+| *"Ask Claude to explain this error"* | ✅ uses your Claude subscription, not a metered key |
 
 MACman doesn't try to *be* a coding assistant — it hands the task to **Claude
 Code**, which has its own tools and does the work. Because that edits files and
@@ -105,6 +105,23 @@ uses your Claude account, it always asks first, naming the project and the task.
 Neither Claude nor VS Code is scriptable via AppleScript, so both are driven by
 their **command-line tools** rather than by clicking their windows — the same
 result without the 50% accessibility coin flip.
+
+## Talking to it
+
+| Ask | Status |
+|---|---|
+| `macman voice` — then just speak | ✅ |
+| *"Stop"* / *"goodbye"* to end | ✅ |
+| Spoken confirmation for guarded actions | ✅ silence counts as no |
+| Speaking through a chosen audio device | ✅ `--output-device "BlackHole 2ch"` |
+
+Transcription uses `SFSpeechRecognizer` in **on-device mode** and speech uses
+`AVSpeechSynthesizer` — both local, both free, both working with no network.
+
+**No login code is needed for local voice.** Speaking into this Mac's
+microphone means standing in front of it, and the screen lock already governs
+that. FaceTime voice will keep the wake phrase and code, because that audio
+arrives over a network from an unverified caller.
 
 ## Getting to it
 
