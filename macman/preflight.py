@@ -72,34 +72,50 @@ def run_checks() -> list[Check]:
 
 
 def main() -> int:
-    state = lockstate.read()
-    checks = run_checks()
-    missing = [c for c in checks if not c.granted]
+    """Report what MACman can do right now, and what one more grant unlocks.
 
-    print("MACman preflight\n")
+    Deliberately framed as capabilities rather than a checklist of missing
+    permissions. Every permission is optional; each adds a feature rather than
+    unlocking the product, and a user who declines one should see a fact, not
+    a warning.
+    """
+    from macman.security import permissions
+
+    state = lockstate.read()
+    working, blocked = permissions.summary()
+
+    print("MACman\n")
     print(f"  Session   {state.user_name or '(none)'}")
     print(f"  Tier      {state.tier.value} — {state.explain()}\n")
 
-    print("  Permissions")
-    for check in checks:
-        mark = "OK  " if check.granted else "    "
-        print(f"    [{mark}] {check.name:<20} {check.needed_for}")
+    print(f"  Working now ({len(working)})")
+    for capability in working:
+        print(f"    ✓ {capability.name}")
 
-    if not missing:
-        print("\nAll permissions granted.")
-        return 0
+    if blocked:
+        print(f"\n  Not available ({len(blocked)})")
+        for capability in blocked:
+            needed = ", ".join(p.name for p in capability.missing())
+            print(f"    · {capability.name}")
+            print(f"        {capability.without}")
+            print(f"        needs: {needed}")
 
-    print(f"\n{len(missing)} permission(s) missing. Open each pane and add your terminal:\n")
-    for check in missing:
-        print(f"  {check.name}")
-        if check.url:
-            print(f"    open '{check.url}'")
+        print("\n  To turn something on:")
+        seen: set[str] = set()
+        for capability in blocked:
+            for permission in capability.missing():
+                if permission.key in seen:
+                    continue
+                seen.add(permission.key)
+                unlocked = permissions.unlocks(permission.key)
+                if unlocked:
+                    print(f"\n    {permission.name} — {permission.because}")
+                    print(f"      unlocks: {', '.join(c.name for c in unlocked)}")
+                    print(f"      open '{permission.url}'")
 
-    print(
-        "\nNote: grants attach to the *calling* binary. Granting these to your terminal "
-        "covers development; MACman.app will need its own grants at v4."
-    )
-    return 1
+    print("\n  Nothing here is required. MACman works with none of these "
+          "granted;\n  each one adds a feature.")
+    return 0
 
 
 def open_pane(pane: str) -> None:
