@@ -21,6 +21,7 @@ in another on identical inputs.
 | **Answer correctness, single tool** | **100%** (8/8) |
 | **Multi-tool chaining** | **100%** (9/9 across 2- and 3-tool tasks) |
 | Accessibility navigation | **50%** — not used in production |
+| **Outbound connections, private task** | **0** — audited |
 | Shell command authoring | **20%** — not offered to this model |
 
 **What MACman actually ships on:** typed tools with validated arguments. The
@@ -230,6 +231,33 @@ why AirDrop is deferred and why Level 2 prefers AppleScript, Shortcuts and URL
 schemes over UI automation.
 
 ---
+
+## Nothing leaves the Mac — audited
+
+The central privacy claim, measured rather than asserted
+(`tests/audit/network.py`). Every socket connection MACman's Python process
+attempts is recorded while real private tasks run end to end.
+
+| | Outbound connections |
+|---|---|
+| Routing decisions (3 sensitive tasks) | **0** |
+| Private tasks through the local engine (5 tasks) | **0** |
+
+Tasks covered: Downloads contents, Documents contents, unread mail count, note
+count, outstanding reminders — all answered correctly, all offline.
+
+**What this does not cover:** the Swift helpers run as separate processes, so
+their sockets are invisible to a Python-level check. `macman-local` and
+`macman-speech` use Apple's on-device frameworks, which Apple documents as
+local — but documented is not verified. Closing that gap needs a packet-level
+check against the helper processes, and it is listed as outstanding rather than
+quietly assumed.
+
+Re-run it yourself:
+
+```bash
+.venv/bin/python tests/audit/network.py
+```
 
 ## Model quirks worth knowing
 
