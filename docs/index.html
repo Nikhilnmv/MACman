@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MACman — text your Mac</title>
+<meta name="description" content="Text or talk to your Mac and it does the thing. The everyday half runs entirely on your Mac — no key, no cloud, no cost.">
+<style>
+  :root {
+    --bg: #0b0b0d;
+    --panel: #141417;
+    --line: #26262b;
+    --text: #ededf0;
+    --dim: #9a9aa4;
+    --accent: #6ee7a8;
+    --warn: #f5c451;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #fbfbfd; --panel: #fff; --line: #e4e4e9;
+      --text: #16161a; --dim: #6b6b76; --accent: #0a8f52; --warn: #96690a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 88px 0 56px; }
+  h1 { font-size: 44px; line-height: 1.1; margin: 0 0 16px; letter-spacing: -0.02em; }
+  .tag { font-size: 20px; color: var(--dim); margin: 0 0 36px; }
+  h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.09em;
+    color: var(--dim); margin: 56px 0 18px; font-weight: 600;
+  }
+  p { margin: 0 0 16px; }
+  a { color: var(--accent); }
+  code, pre { font-family: "SF Mono", ui-monospace, Menlo, monospace; }
+  pre {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; overflow-x: auto; font-size: 13.5px; margin: 0 0 14px;
+  }
+  code { font-size: 0.9em; }
+  .chat {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px 22px; font-size: 14px; margin: 0 0 12px;
+  }
+  .chat div { margin: 0 0 9px; }
+  .chat div:last-child { margin: 0; }
+  .you { color: var(--dim); }
+  .mac { color: var(--text); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 620px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 34px; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 15px 17px;
+  }
+  .card strong { display: block; margin-bottom: 5px; font-size: 14.5px; }
+  .card span { color: var(--dim); font-size: 13.5px; }
+  .stat { display: flex; gap: 28px; flex-wrap: wrap; margin: 0 0 8px; }
+  .stat div b { display: block; font-size: 26px; color: var(--accent); font-weight: 600; }
+  .stat div span { color: var(--dim); font-size: 13px; }
+  .note {
+    border-left: 2px solid var(--warn); padding-left: 15px;
+    color: var(--dim); font-size: 14.5px; margin: 0 0 16px;
+  }
+  ul { padding-left: 20px; margin: 0 0 16px; }
+  li { margin-bottom: 7px; }
+  footer {
+    margin-top: 72px; padding: 28px 0 60px; border-top: 1px solid var(--line);
+    color: var(--dim); font-size: 13.5px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Text your Mac.<br>It does the thing.</h1>
+  <p class="tag">You're out. You remember something you left at home. You text your
+  own Apple ID — and your Mac gets on with it.</p>
+
+  <div class="chat">
+    <div class="you">you &nbsp;→&nbsp; MACman wake up</div>
+    <div class="mac">mac &nbsp;→&nbsp; MACman here. Send your code.</div>
+    <div class="you">you &nbsp;→&nbsp; 482913</div>
+    <div class="mac">mac &nbsp;→&nbsp; MACman ready. What do you need?</div>
+    <div class="you">you &nbsp;→&nbsp; how many PDFs are in my Downloads?</div>
+    <div class="mac">mac &nbsp;→&nbsp; There are exactly 28 PDF files in Downloads.</div>
+    <div class="you">you &nbsp;→&nbsp; end session</div>
+    <div class="mac">mac &nbsp;→&nbsp; Stopped. 1 task this session, $0.000.</div>
+  </div>
+  <p style="color:var(--dim);font-size:14.5px">That <b>$0.000</b> is the point.</p>
+</header>
+
+<h2>Set up</h2>
+<pre>git clone https://github.com/Nikhilnmv/MACman.git &amp;&amp; cd MACman
+python3 -m venv .venv &amp;&amp; .venv/bin/pip install -e .
+cd helpers &amp;&amp; swift build -c release -Xswiftc -DMACMAN_TOOLS &amp;&amp; cd ..
+.venv/bin/python -m macman.main setup</pre>
+<p>The last command walks you through permissions, who's allowed to reach your
+Mac, and your login code — then runs a real task to prove it works.</p>
+<p class="note"><b>A one-line install is coming.</b>
+<code>brew install nikhilnmv/tap/macman</code> is the plan, but the tap isn't
+published yet — so the honest instructions are the ones above.</p>
+
+<h2>Everything below is free</h2>
+<div class="grid">
+  <div class="card"><strong>Files</strong><span>count, find, read, move, copy, rename, compress, trash</span></div>
+  <div class="card"><strong>System</strong><span>lock, sleep, volume, brightness, Wi-Fi, Bluetooth, battery</span></div>
+  <div class="card"><strong>Apps</strong><span>Music, Spotify, browsers, Pages, Numbers, Keynote, Shortcuts</span></div>
+  <div class="card"><strong>Personal</strong><span>Mail, Calendar, Notes, Reminders — read and write</span></div>
+  <div class="card"><strong>Developer</strong><span>open projects in VS Code, hand tasks to Claude Code</span></div>
+  <div class="card"><strong>Voice</strong><span>talk to your Mac and it answers — on-device, offline</span></div>
+</div>
+
+<h2>Why it's different</h2>
+<p><b>Your personal files never leave your Mac.</b> Documents, mail, notes and
+calendar are handled by Apple's on-device model, which ships with macOS. No
+download, no daemon, no API key.</p>
+<p>The part that decides <em>private or cloud</em> makes no network call at all —
+asking a cloud model "is this private?" has already leaked the filename.</p>
+
+<div class="stat">
+  <div><b>0</b><span>connections during private tasks</span></div>
+  <div><b>99%</b><span>tool selection, 105 trials</span></div>
+  <div><b>$0</b><span>everyday use</span></div>
+  <div><b>0 GB</b><span>extra to install</span></div>
+</div>
+<p style="font-size:14px;color:var(--dim)">Every number is measured, with the
+method published, in
+<a href="https://github.com/Nikhilnmv/MACman/blob/main/docs/RELIABILITY.md">RELIABILITY.md</a>
+— including the things that scored badly and were dropped.</p>
+
+<h2>What it will never do</h2>
+<ul>
+  <li><b>Unlock your Mac.</b> It can lock it. macOS blocks the reverse, and MACman holds no password.</li>
+  <li><b>Ask for your login password.</b> Sessions use a code from your authenticator, revocable on its own.</li>
+  <li><b>Answer a stranger.</b> Messages from anyone not on your list are dropped in silence.</li>
+  <li><b>Delete without asking.</b> And deleting means the Trash, never <code>rm</code>.</li>
+  <li><b>Read your keys.</b> <code>~/.ssh</code>, <code>~/.aws</code> and your Keychain are refused in code — not by asking the model nicely.</li>
+  <li><b>Send an email.</b> It drafts; you press send.</li>
+</ul>
+<p>Every permission is optional, and MACman tells you what each one would
+unlock rather than demanding them up front. One command turns everything off:
+<code>scripts/revoke_all.py --revoke</code></p>
+
+<h2>Being honest about limits</h2>
+<p>It runs on a small on-device model, so it does <b>known things reliably</b>
+rather than anything you can imagine. It can't see images, can't operate apps
+that offer no automation, and won't click around your screen guessing — that
+approach measured 50% correct, and a wrong click doesn't give a wrong answer,
+it presses something.</p>
+<p>Harder work — reading code, fixing bugs — is handed to Claude Code, which
+uses your own Claude subscription.</p>
+
+<footer>
+  MIT licensed · <a href="https://github.com/Nikhilnmv/MACman">github.com/Nikhilnmv/MACman</a><br>
+  Requires macOS 26 with Apple Intelligence, Xcode, and a second Apple device to text from.
+</footer>
+
+</div>
+</body>
+</html>
