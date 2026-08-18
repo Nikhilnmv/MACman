@@ -68,10 +68,23 @@ CASES: list[tuple[str, str | None]] = [
     ("", None),
     ("   ", None),
 
+    # Read as one cardinal number. Nobody says a code this way, but the
+    # recogniser produces it — on an Indian-region Mac, "482913" spoken as a
+    # number transcribes as "Four lakh 82,913". Number transcription is
+    # locale-dependent, so the magnitude words are handled rather than assumed
+    # away.
+    ("Four lakh 82,913", "482913"),
+    ("four hundred eighty two thousand nine hundred thirteen", "482913"),
+    ("482,913", "482913"),
+
     # Wrong length is not a code.
     ("four eight two", None),
     ("1234567", None),
     ("12345", None),
+
+    # Magnitude words inside an actual request must stay a request.
+    ("transfer four hundred thousand to savings", None),
+    ("remind me about the four hundred pound invoice", None),
 ]
 
 

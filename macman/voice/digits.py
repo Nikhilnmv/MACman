@@ -46,6 +46,20 @@ _TENS = {
     "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
 }
 
+#: Magnitude words, which mean the utterance is one cardinal number rather than
+#: a run of digits. `lakh` and `crore` are here because the recogniser emits
+#: them: on a Mac set to an Indian region, "482913" spoken as a number
+#: transcribes as **"Four lakh 82,913"**. Number transcription is
+#: locale-dependent, which is not something to discover during a live call.
+_MAGNITUDES = {
+    "hundred": 100,
+    "thousand": 1_000,
+    "lakh": 100_000, "lac": 100_000,
+    "million": 1_000_000,
+    "crore": 10_000_000,
+    "billion": 1_000_000_000,
+}
+
 #: Filler that carries no digits and appears when people read codes aloud.
 _IGNORED = {"my", "code", "is", "the", "it's", "its", "and", "dash", "space"}
 
@@ -55,8 +69,51 @@ def _tokens(text: str) -> list[str]:
 
     `forty-eight` is one written word and two spoken ones, and a recogniser
     may emit either form.
+
+    Thousands separators are stripped first, so `82,913` stays one number
+    rather than becoming 82 and 913 — which would silently change the value.
     """
-    return re.findall(r"[a-z']+|\d+", text.lower().replace("-", " "))
+    cleaned = re.sub(r"(?<=\d),(?=\d)", "", text.lower()).replace("-", " ")
+    return re.findall(r"[a-z']+|\d+", cleaned)
+
+
+def _as_cardinal(tokens: list[str]) -> str | None:
+    """Read tokens as one number: "four lakh 82913" → "482913".
+
+    Used only when a magnitude word is present, because magnitudes and digit
+    runs mean opposite things. "four eight two" is the digits 4, 8, 2; "four
+    hundred" is the single value 400. Choosing the wrong reading silently
+    changes the number, so the two are kept apart rather than blended.
+    """
+    total = 0
+    current = 0
+    seen_any = False
+
+    for token in tokens:
+        if token.isdigit():
+            current += int(token)
+            seen_any = True
+        elif token in _UNITS:
+            current += _UNITS[token]
+            seen_any = True
+        elif token in _TEENS:
+            current += _TEENS[token]
+            seen_any = True
+        elif token in _TENS:
+            current += _TENS[token]
+            seen_any = True
+        elif token in _MAGNITUDES:
+            multiplier = _MAGNITUDES[token]
+            if multiplier == 100:
+                current = max(1, current) * 100
+            else:
+                total += max(1, current) * multiplier
+                current = 0
+            seen_any = True
+        else:
+            return None
+
+    return str(total + current) if seen_any else None
 
 
 def spoken_digits(text: str, *, length: int = 6) -> str | None:
@@ -73,6 +130,12 @@ def spoken_digits(text: str, *, length: int = 6) -> str | None:
         return None
 
     tokens = [t for t in _tokens(text) if t not in _IGNORED]
+
+    # A magnitude word means this is one number, not a run of digits. Handled
+    # separately because the two readings genuinely conflict.
+    if any(token in _MAGNITUDES for token in tokens):
+        cardinal = _as_cardinal(tokens)
+        return cardinal if cardinal and len(cardinal) == length else None
 
     digits: list[str] = []
     index = 0
