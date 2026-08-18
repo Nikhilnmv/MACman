@@ -341,11 +341,31 @@ length check, and was forwarded — a security failure caused by a carry.
 
 | | |
 |---|---|
-| Spoken and typed forms covered | **22/22** |
+| Spoken and typed forms covered | **27/27** |
 | Typed-path regressions | **0** |
 
 Tested in both directions on purpose: a code missed becomes a leak, and a task
 mistaken for a code silently does nothing.
+
+### Number transcription is locale-dependent
+
+Speaking the codes aloud and transcribing them found something guessing would
+not have. Of the three ways a code can be spoken, two return digits directly —
+read out digit by digit gives `482913`, grouped in pairs gives `48 2913`. Read
+as a cardinal number, on a Mac set to an Indian region, it returns:
+
+> `Four lakh 82,913`
+
+**What a recogniser does with numbers depends on the region the Mac is set
+to.** `lakh` and `crore` are now parsed, and thousands separators are stripped
+so `82,913` does not split into 82 and 913 — the same class of silent value
+change as the "forty eight" carry.
+
+Magnitudes are parsed as a *separate reading* rather than folded into the
+digit-run logic, because the two conflict: "four eight two" is the digits
+4, 8, 2, while "four hundred" is the single value 400. The cardinal path runs
+only when a magnitude word is present, so `transfer four hundred thousand to
+savings` stays a task.
 
 ```bash
 .venv/bin/python tests/tasks/spoken_code.py           # strings, no permissions
