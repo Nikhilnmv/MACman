@@ -16,9 +16,9 @@ sitting at the machine.
 ```
 Foundation + text channel   ████████████████████  done, verified live
 Capabilities (18 tools)     ████████████████████  done, 99% selection
-Security, attacked          ████████████████████  23/23, one real leak found + fixed
+Security, attacked          ████████████████████  23/23, two real leaks found + fixed
 Local voice                 ████████████████░░░░  works; unverified by you
-FaceTime calling            ████░░░░░░░░░░░░░░░░  audio proven, call driver not built
+FaceTime calling            ██████████░░░░░░░░░░  audio + auth proven; driver needs a call
 Ready for strangers         ███░░░░░░░░░░░░░░░░░  private repo, 4-command install
 ```
 
@@ -116,11 +116,21 @@ works, speakers untouched.
 
 | | Task |
 |---|---|
-| 👤 | **Second Apple device** — the hard blocker; nothing here works without it |
-| 🤖 | `channels/facetime` — place and answer calls, verified state per step |
-| 🤖 | Wire tap → transcription → engine → BlackHole into a live call loop |
-| 🤖 | Barge-in: stop talking when interrupted |
-| 🤖 | Wake phrase + code over voice — a network caller is unverified, unlike someone at the keyboard |
+| 👤 | **Second Apple device** — the hard blocker; nothing below it works without one |
+| ✅ | **Code over voice** — a spoken code carries no digits; converting it closed a credential leak *before* the channel opened |
+| ✅ | Transcription proven adequate for call audio, and errors proven not to change actions |
+| ⏸ | `channels/facetime` — place and answer calls, verified state per step |
+| ⏸ | Wire tap → transcription → engine → BlackHole into a live call loop |
+| ⏸ | Barge-in: stop talking when interrupted |
+
+The wake phrase already exists and is channel-agnostic (`session.py`), so voice
+inherits it. What was missing was the *code*, and that is done.
+
+**Why the rest is paused rather than in progress:** every remaining item is
+verified by making a call. Writing a call driver that has never answered a call
+is how you get code that compiles, reads well, and fails on first contact —
+and this project has already had three experiments produce confident wrong
+numbers. Building it blind would be the fourth.
 
 **Four experiments, each with a fallback:**
 

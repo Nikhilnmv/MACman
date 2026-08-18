@@ -314,6 +314,44 @@ effect, not to detect a small one. And synthesised speech has no accent, no
 hesitation and perfect articulation, so all of this remains an optimistic bound
 until a real call is tested.
 
+## A leak found by reading, not by running
+
+Not every finding comes from a benchmark. This one came from tracing what a
+TOTP code looks like when it arrives by voice instead of by text, before the
+FaceTime channel existed to expose it.
+
+Typed, a code arrives as `482913`. Spoken, it arrives as **"four eight two nine
+one three"** — no digits at all. Two things then go wrong:
+
+* `security.auth.verify` reduces its argument to digits, so a worded code
+  reduces to the empty string and fails. Five of those locks the caller out for
+  fifteen minutes, having said the right thing every time.
+* `session._looks_like_code` counts digits to decide whether a message is
+  *only* a code. A worded code contains none, so it is treated as a **task and
+  handed to an engine as text** — the credential-to-model leak already fixed
+  once for iMessage, arriving again by a different road.
+
+`voice/digits.py` converts spoken numbers, and is strict in the same direction
+as the function it protects: a code is recognised only when the whole utterance
+is nothing but a number, so `delete file 123456` stays a task.
+
+**The subtle part was arithmetic.** "forty eight" is 48, not 40 followed by 8.
+Parsed naively, a code grouped in pairs produced eight digits, failed the
+length check, and was forwarded — a security failure caused by a carry.
+
+| | |
+|---|---|
+| Spoken and typed forms covered | **22/22** |
+| Typed-path regressions | **0** |
+
+Tested in both directions on purpose: a code missed becomes a leak, and a task
+mistaken for a code silently does nothing.
+
+```bash
+.venv/bin/python tests/tasks/spoken_code.py           # strings, no permissions
+.venv/bin/python tests/tasks/spoken_code.py --audio   # what the recogniser emits
+```
+
 ## Attacked, not asserted — 23/23
 
 Every security property here was a *claim* until it was attacked
