@@ -397,6 +397,20 @@ output.
 all fields; the model correctly omitting an unused one raised
 `decodingFailure`. Several tools were passing on luck until this was found.
 
+**A permission is attributed to the app that launched the process, not to
+MACman.** Running the same binary from Terminal and from another app gives
+different answers: `authorized` in one, `notDetermined` in the other. Worse,
+*requesting* a permission from a launching app that declares no usage
+description makes macOS **kill the process with SIGABRT** — no prompt, no
+error, nothing catchable.
+
+This was found when file transcription crashed instead of failing. It only
+occurs while a permission is `notDetermined`, so it is invisible on a Mac
+where the permission was already granted — which was every Mac this project
+had run on. **A fresh install would have crashed where it should have asked.**
+Requesting is now isolated in a separate `authorise` command meant for setup;
+`listen` and `transcribe` report and exit rather than prompting.
+
 **The on-device model is sometimes simply unavailable.** One task in an audit
 run failed with `LocalEngineUnavailable` and the identical task succeeded on
 the next run, with no change in between. Apple's model is a shared system

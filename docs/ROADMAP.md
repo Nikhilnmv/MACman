@@ -124,15 +124,36 @@ works, speakers untouched.
 
 **Four experiments, each with a fallback:**
 
-| Question | If it fails |
-|---|---|
-| Does `AutoAcceptInvites` still work on macOS 26? | click Accept via Accessibility |
-| Do taps capture FaceTime specifically? | BlackHole as system output, worse but works |
-| **Is transcription accurate on compressed call audio?** | cloud speech-to-text; moves voice to the paid tier |
-| Is FaceTime's Accessibility tree drivable? | URL schemes only; fewer controls |
+| Question | Status | If it fails |
+|---|---|---|
+| Does `AutoAcceptInvites` still work on macOS 26? | ⏸ needs a call | click Accept via Accessibility |
+| Do taps capture FaceTime specifically? | ⏸ needs a call | BlackHole as system output, worse but works |
+| **Is transcription accurate on compressed call audio?** | 🔬 built, needs you to run it | cloud speech-to-text; moves voice to the paid tier |
+| Is FaceTime's Accessibility tree drivable? | 🔬 built, needs you to run it | URL schemes only; fewer controls |
 
-The third is the one I'd bet against. Your clean-mic test was perfect; a
-FaceTime call is a different signal entirely.
+The third is the one I'd bet against. The clean-mic test was perfect; a
+FaceTime call is a different signal entirely. `tests/tasks/call_audio.py` now
+measures it with **AAC-ELD, the codec FaceTime actually uses**, against
+synthesised speech with a known transcript — so it can be scored rather than
+judged by ear.
+
+**Both must be run from Terminal, not from an assistant.** macOS attributes a
+permission to the app that launched the process, so a tool running under
+another app is `notDetermined` even where you have already granted it:
+
+```bash
+cd ~/Documents/MACMan
+.venv/bin/python tests/tasks/call_audio.py       # transcription vs call quality
+.venv/bin/python tests/tasks/facetime_probe.py   # is FaceTime's UI drivable
+```
+
+**Already found without a second device:** FaceTime ships no `.sdef`, so
+AppleScript is out — it is URL schemes plus Accessibility, which makes the
+fourth experiment load-bearing rather than a nicety.
+
+`AutoAcceptInvites` is **not** set on this Mac, and is deliberately left unset:
+blanket auto-answer would let anyone who calls connect. Answering should be
+gated on the allowlist, which is what the Accessibility path buys.
 
 **Done when:** you call your Mac from another room, ask for something out
 loud, and it answers.
