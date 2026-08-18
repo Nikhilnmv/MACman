@@ -81,7 +81,7 @@ since Homebrew fetches a public tarball.
 ```bash
 git clone git@github.com:Nikhilnmv/MACman.git
 cd MACman
-python3 -m venv .venv && .venv/bin/pip install -e .   # 17 packages, no cloud SDK
+python3 -m venv .venv && .venv/bin/pip install -e .   # 11 packages, no cloud SDK
 cd helpers && swift build -c release -Xswiftc -DMACMAN_TOOLS && cd ..
 .venv/bin/python -m macman.main setup
 ```
@@ -126,7 +126,14 @@ boundaries are worth stating plainly.
 - **Every tool call is logged** to an append-only audit file.
 - **One command turns everything off**: `scripts/revoke_all.py --revoke`
 
-More detail: [DESIGN.md](docs/DESIGN.md) §6.
+These are attacked rather than asserted — **23 attack vectors, 23 resisted**
+(`tests/audit/injection.py`). One of them found a real credential leak before
+it found nothing.
+
+**Before you install this, read [SECURITY.md](docs/SECURITY.md)** — especially
+[what it does *not* protect you from](docs/SECURITY.md#what-macman-does-not-protect-you-from).
+It needs Full Disk Access, it has been reviewed by exactly one person, and both
+of those facts are yours to weigh.
 
 ---
 
@@ -155,6 +162,7 @@ used. A wrong click isn't a wrong answer — it presses something.
 
 | | |
 |---|---|
+| [SECURITY.md](docs/SECURITY.md) | Threat model, and what it does **not** protect against |
 | [TESTING.md](docs/TESTING.md) | Set up and verify everything, step by step |
 | [COMMANDS.md](docs/COMMANDS.md) | Everything it can do, and how to ask |
 | [RELIABILITY.md](docs/RELIABILITY.md) | Every measurement, with the method |

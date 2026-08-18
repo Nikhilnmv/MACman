@@ -68,8 +68,9 @@ brew update-python-resources $(brew --repository nikhilnmv/tap)/Formula/macman.r
 ```
 
 That replaces the `# RESOURCES_GO_HERE` marker with pinned `resource` blocks —
-**17 packages**, since `anthropic` is an optional extra rather than a base
-dependency.
+**11 packages**, since `anthropic` is an optional extra rather than a base
+dependency. Cross-check the result against [`requirements.lock`](../requirements.lock);
+if the two disagree, one of them is wrong and it matters which.
 
 ### 5. Test before announcing it
 

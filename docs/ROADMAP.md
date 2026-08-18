@@ -16,6 +16,7 @@ sitting at the machine.
 ```
 Foundation + text channel   ████████████████████  done, verified live
 Capabilities (18 tools)     ████████████████████  done, 99% selection
+Security, attacked          ████████████████████  23/23, one real leak found + fixed
 Local voice                 ████████████████░░░░  works; unverified by you
 FaceTime calling            ████░░░░░░░░░░░░░░░░  audio proven, call driver not built
 Ready for strangers         ███░░░░░░░░░░░░░░░░░  private repo, 4-command install
@@ -72,24 +73,35 @@ attacked is the one mistake that could genuinely hurt someone.**
 as opposed to *correct*. The benchmark measures whether it picks the right
 tool, not whether anyone wants the result.
 
-### 1b. Adversarial security testing
+### 1b. Adversarial security testing ✅
 
-The defences are asserted, not attacked. That has to change before anyone else
-installs this.
+The defences were asserted, not attacked. Now they're attacked.
 
 | | Task |
 |---|---|
-| 🤖 | **Prompt injection suite** — malicious text in files, web pages, emails, filenames, attempting exfiltration and destructive actions |
-| 🤖 | Attempt to reach `~/.ssh` by indirection, symlink, relative path, unicode |
-| 🤖 | Attempt to talk past a confirmation gate |
-| 🤖 | Attempt to make a private task route to the cloud |
-| 🤖 | Dependency audit: pin all 17 with hashes, justify each |
-| 🤖 | Swift helper network check (the Python audit can't see their sockets) |
-| 🤖 | Write the threat model honestly — including what MACman does **not** protect against |
+| ✅ | **Prompt injection suite** — hostile text in file content and filenames: fake system turns, forged authority, urgency, tool-shaped payloads |
+| ✅ | Reach `~/.ssh` by indirection — traversal, symlink, case variants |
+| ✅ | Talk past a confirmation gate |
+| ✅ | Force a private task to the cloud |
+| ✅ | Dependency audit: all **11** pinned with every hash, each justified |
+| ✅ | Swift helper network check (the Python audit can't see their sockets) |
+| ✅ | [SECURITY.md](SECURITY.md) — the threat model, including what MACman does **not** protect against |
 
-**Done when:** an attacker with the ability to put text in front of MACman
-cannot make it exfiltrate data, destroy files, or bypass a gate — and where
-that isn't true, it's documented rather than hidden.
+**Result: 23 attack vectors, 23 resisted** — but only after the suite found a
+**real vulnerability**. macOS filesystems are case-insensitive, so `~/.SSH/id_ed25519`
+returned live private key material while the audit scored it as passing, because
+the audit compared spellings too. Fixed in three independent checks; the suite
+now scores by inode identity.
+
+Two corrections came out of this beyond the fix itself:
+
+- The free tier is **11 packages, not 17**. The old number was never measured
+  after the cloud SDK was dropped.
+- On-device inference and speech were verified to open **no sockets** at
+  runtime, closing a caveat that previously rested on Apple's documentation.
+
+**Still true and worth saying:** one developer, one Mac, no external review.
+[SECURITY.md](SECURITY.md) says so in those words.
 
 ---
 

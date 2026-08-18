@@ -18,10 +18,16 @@ routing, tool execution and the cloud engine live. If the router leaked, or a
 tool phoned home, it appears here.
 
 Not covered: the Swift helpers run as separate processes, so their sockets are
-invisible to this test. `macman-local` and `macman-speech` use Apple's
-on-device frameworks, which Apple documents as local — but *documented* is not
-*verified*, and closing that gap needs a packet-level check (`lsof -i` against
-the helper, or Little Snitch). Stated here rather than glossed.
+invisible to this test — a Python-level patch cannot see another process.
+
+That gap has since been closed **separately**, by observing the helpers with
+`lsof -i` while they did real work: `macman-local` held no open socket during a
+complete inference, and `macman-speech` held none through recogniser start-up
+and audio capture. Results and the remaining caveat are in
+RELIABILITY.md ("The Swift helpers — the gap that check couldn't see").
+
+It is recorded there rather than automated here because it needs the helpers
+running under observation, which this in-process test cannot arrange.
 """
 
 from __future__ import annotations
@@ -142,8 +148,8 @@ def main() -> int:
     print()
     if total == 0:
         print("  PASS — nothing left the Mac.")
-        print("  Note: the Swift helpers are separate processes and are not")
-        print("  covered here. See this file's docstring.")
+        print("  Scope: MACman's Python process. The Swift helpers are separate")
+        print("  processes, checked separately with lsof — see RELIABILITY.md.")
         return 0
 
     print(f"  FAIL — {total} outbound connection(s) during private work.")

@@ -21,7 +21,8 @@ in another on identical inputs.
 | **Answer correctness, single tool** | **100%** (8/8) |
 | **Multi-tool chaining** | **100%** (9/9 across 2- and 3-tool tasks) |
 | Accessibility navigation | **50%** — not used in production |
-| **Outbound connections, private task** | **0** — audited |
+| **Outbound connections, private task** | **0** — audited, Python *and* Swift |
+| **Adversarial attacks resisted** | **23/23** — after one real leak was found and fixed |
 | Shell command authoring | **20%** — not offered to this model |
 
 **What MACman actually ships on:** typed tools with validated arguments. The
@@ -232,6 +233,53 @@ schemes over UI automation.
 
 ---
 
+## Attacked, not asserted — 23/23
+
+Every security property here was a *claim* until it was attacked
+(`tests/audit/injection.py`). The threat model: someone who can put text in
+front of MACman — a file you ask it to read, an email, a filename — but cannot
+run code on your Mac. If they can run code, MACman is not the problem.
+
+| Attack class | Vectors | Held |
+|---|---|---|
+| Reaching `~/.ssh` by indirection | 10 | 10 |
+| Hostile instructions inside file content | 5 | 5 |
+| Hostile instructions in a *filename* | 1 | 1 |
+| Talking past the confirmation gate | 3 | 3 |
+| Forcing a private task to the cloud | 4 | 4 |
+
+### It found a real leak, and the audit itself was wrong first
+
+The first run reported **21/21 held** — and was wrong. One "held" row carried
+the note `resolved to /Users/…/.SSH/id_rsa` rather than "refused", which is not
+what a refusal looks like.
+
+**macOS filesystems are case-insensitive by default.** `~/.SSH/id_ed25519` and
+`~/.Ssh/id_ed25519` open the same file as `~/.ssh/id_ed25519`. The path check
+compared strings, so a different spelling of the same file passed it. Both
+variants **returned real private key material** — on the typed-tool path and
+the shell-guard path alike.
+
+The audit had scored those attacks as held because it, too, compared strings.
+A test that shares its subject's bug confirms the bug.
+
+Both were fixed. `typed._within()` now applies three independent checks —
+resolved prefix (catches `..` and symlinks), case-folded prefix (catches
+spelling), and inode identity via `samefile` (catches hard links and
+firmlinks) — and the guard case-folds. The audit now scores path attacks by
+`samefile`, not by spelling, because identity on disk is the only thing that
+decides whether a file was reached.
+
+**The lesson worth keeping:** a security test that passes proves nothing until
+you have watched it fail. This one passed for the wrong reason while a private
+key was readable.
+
+```bash
+.venv/bin/python tests/audit/injection.py   # any PASS means an attack succeeded
+```
+
+---
+
 ## Nothing leaves the Mac — audited
 
 The central privacy claim, measured rather than asserted
@@ -246,18 +294,35 @@ attempts is recorded while real private tasks run end to end.
 Tasks covered: Downloads contents, Documents contents, unread mail count, note
 count, outstanding reminders — all answered correctly, all offline.
 
-**What this does not cover:** the Swift helpers run as separate processes, so
-their sockets are invisible to a Python-level check. `macman-local` and
-`macman-speech` use Apple's on-device frameworks, which Apple documents as
-local — but documented is not verified. Closing that gap needs a packet-level
-check against the helper processes, and it is listed as outstanding rather than
-quietly assumed.
-
 Re-run it yourself:
 
 ```bash
 .venv/bin/python tests/audit/network.py
 ```
+
+### The Swift helpers — the gap that check couldn't see
+
+A Python-level socket patch cannot observe a separate process, so the helpers
+doing the two most privacy-sensitive jobs — running the model and transcribing
+speech — were outside it. Apple documents `FoundationModels` and
+`SFSpeechRecognizer` as on-device, but documented is not verified, and this is
+precisely the claim the whole product rests on. So it was checked directly.
+
+Static linkage first: `otool -L` shows no networking framework linked in any of
+the five helpers. **Not conclusive on its own** — `URLSession` lives inside
+`Foundation`, which every one of them links — so each was also observed at
+runtime while doing real work.
+
+| Helper | Observed during | Open sockets |
+|---|---|---|
+| `macman-local` | a real inference answering a file question | **none** |
+| `macman-speech` | recogniser start-up and audio-engine capture | **none** |
+
+**The limit of the speech result:** the recogniser initialised and the audio
+engine ran, but no words were spoken during the observation, so this shows
+*setup* opens no connection. A full transcription of real speech would be the
+stronger claim and has not been made. The inference result carries no such
+caveat — that was a complete, correct answer produced with no socket open.
 
 ## Dependency surface — audited
 
@@ -267,7 +332,7 @@ question.
 
 | | Packages |
 |---|---|
-| Free, on-device tier | **17** |
+| Free, on-device tier | **11** |
 | With the Claude tier (`[cloud]`) | 35 |
 
 **The finding:** the free tier was importing the Anthropic SDK purely for a
@@ -281,6 +346,35 @@ byte-identical schemas. Verified by blocking `anthropic` at import and
 confirming all 18 tools, the local engine and the router still load.
 
 `anthropic` is now an optional extra, needed only by the cloud engine.
+
+**A correction:** this table read **17** until the count was actually measured.
+That number was carried over from the change that removed the SDK and never
+re-checked; a clean install of the declared dependencies produces 11. Two
+packages sitting in the development environment (`CoreServices`, `FSEvents`)
+are orphans from an earlier dependency set and belong to no tier. The real
+number is better than the one being advertised, which is exactly why it went
+unquestioned for as long as it did.
+
+### Pinned by hash
+
+`requirements.lock` pins all 11 to exact versions with every sha256 PyPI
+publishes for them, generated from `pyproject.toml` by `scripts/lock_deps.py`
+so the list cannot drift from what is declared. Each package carries a one-line
+justification, and the generator exits non-zero if any lacks one.
+
+| Check | Result |
+|---|---|
+| Clean install, `--require-hashes` | 11 packages, no failures |
+| All digests for one package corrupted | **refused, nothing installed** |
+
+The second row is the one that matters: a lock that is never tested against a
+bad artifact is decoration. An initial attempt at that test corrupted only one
+of two digests and pip installed anyway — correctly, by falling back to the
+sdist whose hash still matched. The test was wrong, not the defence.
+
+```bash
+pip install --require-hashes -r requirements.lock
+```
 
 ## Model quirks worth knowing
 
@@ -303,6 +397,14 @@ output.
 all fields; the model correctly omitting an unused one raised
 `decodingFailure`. Several tools were passing on luck until this was found.
 
+**The on-device model is sometimes simply unavailable.** One task in an audit
+run failed with `LocalEngineUnavailable` and the identical task succeeded on
+the next run, with no change in between. Apple's model is a shared system
+resource and can decline under memory pressure or while another process holds
+it. This is recorded rather than re-run away because **users will hit it**: it
+looks like a bug in MACman and is not one. MACman reports it as a failure
+instead of guessing an answer, which is the intended behaviour.
+
 ---
 
 ## Not yet measured
@@ -313,7 +415,10 @@ all fields; the model correctly omitting an unused one raised
 | Long chains (5–10 tools) | Only up to 3 tested |
 | Refusal rate *with* tools | Only text-only measured |
 | Real accessibility trees | Experiments used hand-modelled trees |
-| Selection accuracy past 14 tools | This benchmark is the baseline to re-run |
+| Selection accuracy past 18 tools | 99% at 18 is the baseline to re-run |
+| Sockets during a *full* transcription | Only recogniser start-up observed |
+| Transcription accuracy on call audio | Clean-mic only; compressed audio untested |
+| Anything on a Mac that is not this one | Single machine, single user |
 
 ---
 
@@ -324,4 +429,7 @@ all fields; the model correctly omitting an unused one raised
 .venv/bin/python tests/tasks/suite.py --routing             # routing, free
 .venv/bin/python tests/tasks/suite.py --run local           # correctness vs ground truth
 .venv/bin/python tests/tasks/ax_navigation.py               # accessibility navigation
+.venv/bin/python tests/audit/injection.py                   # adversarial, offline
+.venv/bin/python tests/audit/network.py                     # outbound connections
+.venv/bin/python scripts/lock_deps.py > requirements.lock   # regenerate the lock
 ```

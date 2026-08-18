@@ -6,8 +6,9 @@
 # Two things worth knowing about this formula:
 #
 #   * It installs the free tier only. `anthropic` is an optional extra, so a
-#     default install pulls 17 packages rather than 35, and nothing from a
-#     cloud vendor is required to run MACman offline.
+#     default install pulls 11 packages rather than 35, and nothing from a
+#     cloud vendor is required to run MACman offline. That count is measured
+#     by a clean install, not estimated — see requirements.lock.
 #   * It needs full Xcode, not Command Line Tools. Apple's tool-calling macros
 #     (FoundationModelsMacros) ship only with Xcode, and without them the
 #     on-device model cannot use tools — which is most of the product.
