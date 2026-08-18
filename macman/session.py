@@ -27,6 +27,7 @@ from macman.config import Engine
 from macman.router import Route, route
 from macman.security import auth, lockstate
 from macman.security.audit import AuditLog
+from macman.voice.digits import looks_like_spoken_code, spoken_digits
 
 #: Ends a session from any state, including an unauthenticated one.
 #: Phrased generously on purpose: this is the control someone reaches for when
@@ -61,10 +62,17 @@ def _looks_like_code(text: str) -> bool:
     handed to an engine as task text, and on a cloud-routed session that means
     transmitting a credential to the API. Requiring the *whole* message to be
     six digits keeps legitimate tasks like "delete file 123456" unaffected.
+
+    Also matches a **spoken** code. A voice channel transcribes `482913` as
+    "four eight two nine one three", which contains no digits at all — so the
+    digit test alone would call it a task and forward the credential to a
+    model, reintroducing by voice the exact leak this function exists to stop.
     """
     digits = "".join(character for character in text if character.isdigit())
     remainder = "".join(character for character in text if not character.isdigit())
-    return len(digits) == 6 and remainder.strip() == ""
+    if len(digits) == 6 and remainder.strip() == "":
+        return True
+    return looks_like_spoken_code(text)
 
 
 class State(str, Enum):
@@ -201,7 +209,11 @@ class SessionManager:
         return None
 
     def _authenticate(self, handle: str, text: str) -> str:
-        result = self.authenticator.verify(text)
+        # A spoken code carries no digits, and `verify` reduces its argument to
+        # digits — so "four eight two nine one three" would arrive empty and
+        # count as a failed attempt, five of which lock the caller out. Convert
+        # first, and fall back to the raw text so a typed code is untouched.
+        result = self.authenticator.verify(spoken_digits(text) or text)
 
         if result is auth.AuthResult.OK:
             self._awake.pop(handle, None)
