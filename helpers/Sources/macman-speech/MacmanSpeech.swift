@@ -43,6 +43,16 @@ struct SayResult: Codable {
     var elapsedMs: Int
 }
 
+struct TranscribeResult: Codable {
+    var ok: Bool
+    var text: String?
+    var error: String?
+    /// Whether on-device recognition was actually requested. Reported rather
+    /// than assumed — if this is false, the audio went to Apple's servers.
+    var onDevice: Bool
+    var elapsedMs: Int
+}
+
 func emit<T: Encodable>(_ value: T) {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
@@ -184,9 +194,18 @@ func listen(maxSeconds: Double, silenceSeconds: Double) {
         exit(1)
     }
 
-    let (mic, speech) = requestPermissions()
-    guard mic else { fail("Microphone access was denied.") }
-    guard speech else { fail("Speech recognition access was denied.") }
+    // Report rather than request, for the reason spelled out in `transcribe`:
+    // a permission *request* is attributed to whichever app launched us, and
+    // TCC kills the process outright if that app declares no usage string.
+    // `authorise` is the one command allowed to prompt.
+    guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
+        fail("Microphone permission not granted (\(describeMic())). "
+             + "Run `macman setup` from Terminal.")
+    }
+    guard SFSpeechRecognizer.authorizationStatus() == .authorized else {
+        fail("Speech recognition permission not granted (\(describeSpeech())). "
+             + "Run `macman setup` from Terminal.")
+    }
 
     guard let recogniser = SFSpeechRecognizer(locale: Locale(identifier: "en-US")),
           recogniser.isAvailable else {
@@ -421,6 +440,116 @@ func say(text: String, device: String?) {
     finish(true, nil)
 }
 
+// MARK: - Transcribing a file
+
+/// Transcribe an audio file on-device.
+///
+/// Exists so transcription accuracy can be *measured* against a known
+/// transcript rather than judged by ear. Live `listen` cannot do that: there is
+/// no ground truth for what was spoken into a microphone.
+///
+/// It is also the path a recorded call would take, so this is not test-only
+/// scaffolding.
+///
+/// `onDevice` in the result reports what was actually requested, not what we
+/// hoped for. If the recogniser does not support on-device work for this
+/// locale, the request would otherwise silently go to Apple's servers — which
+/// for this project is the difference between the central claim holding and
+/// not. Callers should check the flag rather than assume it.
+func transcribe(path: String) {
+    let started = Date()
+
+    func finish(_ ok: Bool, _ text: String?, _ error: String?, onDevice: Bool) -> Never {
+        emit(TranscribeResult(
+            ok: ok, text: text, error: error, onDevice: onDevice,
+            elapsedMs: Int(Date().timeIntervalSince(started) * 1000)))
+        exit(ok ? 0 : 1)
+    }
+
+    let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+    guard FileManager.default.fileExists(atPath: url.path) else {
+        finish(false, nil, "No such file: \(url.path)", onDevice: false)
+    }
+
+    // Deliberately does **not** request authorisation — it reports instead.
+    //
+    // Requesting is what crashes. macOS attributes a permission request to the
+    // *responsible process* (the app that launched this one), and if that app
+    // declares no usage description, TCC kills us with SIGABRT before any code
+    // of ours runs. There is no way to catch it.
+    //
+    // So the rule is: asking for permission belongs in `macman setup`, where a
+    // human is at the keyboard and can answer the dialog. A transcription in
+    // the middle of a call must never trigger a prompt — it fails with
+    // something the caller can act on.
+    switch SFSpeechRecognizer.authorizationStatus() {
+    case .authorized:
+        break
+    case .notDetermined:
+        finish(false, nil,
+               "Speech recognition permission has not been granted yet. "
+               + "Run `macman setup` from Terminal to grant it.",
+               onDevice: false)
+    case .denied, .restricted:
+        finish(false, nil,
+               "Speech recognition access is denied. Enable it in System "
+               + "Settings → Privacy & Security → Speech Recognition.",
+               onDevice: false)
+    @unknown default:
+        finish(false, nil, "Speech recognition permission is in an unknown state.",
+               onDevice: false)
+    }
+
+    guard let recogniser = SFSpeechRecognizer(locale: Locale(identifier: "en-US")),
+          recogniser.isAvailable else {
+        finish(false, nil, "Speech recogniser is unavailable.", onDevice: false)
+    }
+
+    let request = SFSpeechURLRecognitionRequest(url: url)
+    request.shouldReportPartialResults = false
+    let onDevice = recogniser.supportsOnDeviceRecognition
+    request.requiresOnDeviceRecognition = onDevice
+
+    struct Outcome {
+        var text: String?
+        var error: String?
+        var done = false
+    }
+    let state = Locked(Outcome())
+
+    recogniser.recognitionTask(with: request) { result, error in
+        state.withLock { outcome in
+            if outcome.done { return }
+            if let error {
+                outcome.error = error.localizedDescription
+                outcome.done = true
+            } else if let result, result.isFinal {
+                outcome.text = result.bestTranscription.formattedString
+                outcome.done = true
+            }
+        }
+    }
+
+    // Long files need time; the ceiling is generous because a timeout here
+    // would be indistinguishable from a transcription failure.
+    let deadline = Date().addingTimeInterval(180)
+    while Date() < deadline {
+        if state.withLock({ $0.done }) { break }
+        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+    }
+
+    let outcome = state.withLock { $0 }
+    if let error = outcome.error {
+        finish(false, nil, error, onDevice: onDevice)
+    }
+    guard let text = outcome.text else {
+        finish(false, nil, "Transcription timed out.", onDevice: onDevice)
+    }
+    // An empty transcript is reported as success with empty text: the
+    // recogniser ran and heard nothing, which is a result, not an error.
+    finish(true, text, nil, onDevice: onDevice)
+}
+
 // MARK: - Entry point
 
 let args = Array(CommandLine.arguments.dropFirst())
@@ -443,10 +572,33 @@ case "listen":
 case "say":
     say(text: argument("--text", args) ?? "", device: argument("--device", args))
 
+case "transcribe":
+    transcribe(path: argument("--file", args) ?? "")
+
+case "authorise", "authorize":
+    // The only command that may show a permission dialog. Run by `macman
+    // setup`, from a terminal, with a human present to answer it.
+    //
+    // If the launching app declares no usage description, macOS terminates
+    // this process rather than returning an error — so it is deliberately
+    // isolated in its own command instead of being reached from `listen` or
+    // `transcribe`, where a crash would look like a MACman fault mid-call.
+    let (mic, speech) = requestPermissions()
+    emit(CheckResult(
+        recogniserAvailable: SFSpeechRecognizer(
+            locale: Locale(identifier: "en-US"))?.isAvailable ?? false,
+        onDeviceSupported: SFSpeechRecognizer(
+            locale: Locale(identifier: "en-US"))?.supportsOnDeviceRecognition ?? false,
+        microphone: describeMic(),
+        speechRecognition: describeSpeech(),
+        outputDevices: outputDeviceNames()))
+    exit(mic && speech ? 0 : 1)
+
 case let other?:
     FileHandle.standardError.write(Data("""
         macman-speech: unknown command '\(other)'
-        usage: macman-speech [check|listen|say] [--text T] [--device D] [--seconds N]
+        usage: macman-speech [check|authorise|listen|say|transcribe]
+                             [--text T] [--device D] [--seconds N] [--file PATH]
 
         """.utf8))
     exit(2)

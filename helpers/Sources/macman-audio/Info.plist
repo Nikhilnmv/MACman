@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Embedded into the macman-audio binary's __TEXT,__info_plist section.
+
+  Core Audio process taps are privacy-sensitive on macOS 14.4 and later: they
+  capture another application's audio. Without a usage description the request
+  fails, or TCC terminates the process outright, with no prompt shown.
+
+  Added alongside the speech helper's after that exact bug was found there. It
+  is invisible on a Mac where permission has already been granted, which is the
+  only kind of Mac this project has been tested on so far.
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.macman.helpers.audio</string>
+    <key>CFBundleName</key>
+    <string>macman-audio</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>MACman captures audio from a call so it can hear what you ask. Audio is processed on-device and is not recorded or uploaded.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>MACman captures call audio to respond to spoken requests. Audio is processed on-device.</string>
+</dict>
+</plist>
