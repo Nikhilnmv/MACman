@@ -84,14 +84,20 @@ def main() -> int:
         return 2
 
     print("── Q1. Can we see FaceTime's UI at all?")
+
+    # Three separate waits, because the process existing, the window existing,
+    # and the window being *populated* happen at different times. An earlier
+    # version waited only for the process and reported "tree is opaque" on a
+    # window that simply had not been built yet — three consecutive runs gave
+    # "did not start", "0 windows", then 19 nodes. That is a race in the probe,
+    # not a finding about FaceTime, and it would have been recorded as one.
     pid = pid_for_bundle(BUNDLE)
     if pid is None:
         print("   FaceTime not running; opening it.")
         subprocess.run(["open", "-a", "FaceTime"], check=False)
-        for _ in range(20):
+        for _ in range(40):
             time.sleep(0.5)
-            pid = pid_for_bundle(BUNDLE)
-            if pid:
+            if (pid := pid_for_bundle(BUNDLE)) is not None:
                 break
     if pid is None:
         print("   FAIL — FaceTime did not start.")
@@ -99,14 +105,25 @@ def main() -> int:
     print(f"   FaceTime running, pid {pid}")
 
     app = AXUIElementCreateApplication(pid)
-    windows = _attr(app, "AXWindows") or []
+
+    windows = []
+    for _ in range(40):
+        windows = _attr(app, "AXWindows") or []
+        if windows:
+            break
+        time.sleep(0.5)
     print(f"   windows visible to Accessibility: {len(windows)}")
     if not windows:
-        print("   No windows — FaceTime may be open with no UI shown.")
+        print("   FAIL — no window after 20s. FaceTime may be running with no")
+        print("   UI shown; bring it to the front and re-run.")
+        return 1
 
     nodes = []
-    for window in windows:
-        nodes.extend(list(walk(window)))
+    for _ in range(40):
+        nodes = [node for window in windows for node in walk(window)]
+        if len(nodes) > 1:
+            break
+        time.sleep(0.5)
 
     print(f"   nodes in the tree: {len(nodes)}")
     if len(nodes) <= 1:
@@ -140,16 +157,34 @@ def main() -> int:
               "question 3 and needs a second device.")
 
     unlabelled = sum(1 for _, r, l in nodes if "Button" in r and not l)
-    if buttons and unlabelled == len(buttons):
-        print("\n   WARNING: every button is unlabelled. Addressing by *path* "
-              "would work, but paths shift between macOS releases, and there "
-              "is no label to verify we pressed the right thing.")
+    labelled = len(buttons) - unlabelled
+
+    print(f"\n   labelled: {labelled}   unlabelled: {unlabelled}")
+    if unlabelled:
+        print("\n   RISK: an unlabelled button can only be addressed by its")
+        print("   position in the tree. Positions shift between macOS releases,")
+        print("   and there is no label to confirm we pressed the right thing —")
+        print("   which is the same weakness that measured 50% in")
+        print("   RELIABILITY.md and got Accessibility clicking dropped.")
+        print("   Answering a call this way is only acceptable if Accept turns")
+        print("   out to be *labelled*. That is question 3.")
 
     print("\n" + "─" * 68)
     print("  Q1 readable tree      : PASS")
-    print(f"  Q2 pressable controls : {'PASS' if buttons else 'FAIL'} "
-          f"({len(buttons)} buttons)")
+    # Deliberately not a flat PASS: buttons existing is not the same as being
+    # safely pressable, and the honest verdict depends on whether the control
+    # that matters carries a label.
+    if not buttons:
+        verdict = "FAIL — nothing pressable"
+    elif unlabelled:
+        verdict = (f"PARTIAL — {len(buttons)} buttons, {unlabelled} unlabelled")
+    else:
+        verdict = f"PASS — {len(buttons)} buttons, all labelled"
+    print(f"  Q2 pressable controls : {verdict}")
     print("  Q3 incoming-call UI   : BLOCKED — needs a second Apple device")
+    print("\n  Q3 is the one that decides this. If Accept is labelled, calls can")
+    print("  be answered under allowlist control. If not, the fallback is")
+    print("  AutoAcceptInvites, which answers *everyone* and is a worse trade.")
     return 0
 
 
