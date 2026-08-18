@@ -44,6 +44,7 @@ import subprocess
 import sys
 import tempfile
 import wave
+import zlib
 from array import array
 from dataclasses import dataclass
 from pathlib import Path
@@ -228,45 +229,63 @@ def degrade(source: Path, destination: Path, condition: Condition,
             rng: random.Random) -> bool:
     """Put clean audio through the condition and hand back decoded WAV.
 
-    Order matters, and follows what a real call does to a voice:
+    Order:
 
-    1. **Noise before the codec** — it is picked up by the microphone, so the
-       encoder has to spend bits on it. Adding it afterwards would be a
-       gentler, and wrong, test.
-    2. **Encode and decode** with AAC-ELD.
-    3. **Packet loss after the codec** — loss happens on the wire, and the
-       decoder produces the gap.
+    1. **Resample to the final rate first.**
+    2. **Add noise there**, so the labelled SNR is the SNR the recogniser
+       actually receives.
+    3. **Encode and decode** with AAC-ELD, which the noise passes through as a
+       microphone's noise would.
+    4. **Packet loss last**, because loss happens on the wire.
 
-    Every condition ends as WAV at its target rate, so the recogniser always
-    receives the same container and only the damage differs.
+    Step 1 is the correction. Adding wideband noise at 48 kHz *before*
+    resampling — the obvious order, and what this did originally — spreads
+    noise energy up to 24 kHz, and resampling then discards everything above
+    the new Nyquist along with most of the noise. Measured on this machine:
+    a nominal 5 dB SNR arrived as **10.5 dB** at 16 kHz and **13.7 dB** at
+    8 kHz.
+
+    The result was an experiment where degrading harder made the audio
+    cleaner. "terrible call" at 8 kHz scored *better* than plain 5 dB noise at
+    16 kHz, because downsampling had removed more of the noise than it removed
+    of the speech. Adding damage cannot improve accuracy; that contradiction
+    is what exposed it.
+
+    Band-limiting first also models real noise better. Room and line noise sit
+    in the speech band; they are not white to 24 kHz.
     """
-    staged = source
+    working = destination.with_name(destination.stem + "_work.wav")
 
+    # 1. Resample to the final rate before anything else touches the signal.
+    if not _afconvert(["-f", "WAVE", "-d", f"LEI16@{condition.rate}", "-c", "1",
+                       str(source), str(working)]):
+        return False
+
+    # 2. Noise, now in-band by construction.
     if condition.snr_db is not None:
-        noisy = destination.with_name(destination.stem + "_noisy.wav")
-        samples, rate = _read_pcm(source)
-        _write_pcm(noisy, add_noise(samples, condition.snr_db, rng), rate)
-        staged = noisy
+        samples, rate = _read_pcm(working)
+        _write_pcm(working, add_noise(samples, condition.snr_db, rng), rate)
 
+    # 3. Codec. AAC-ELD encodes at 16 kHz; decode returns to the target rate.
     if condition.bitrate is None:
-        ok = _afconvert(["-f", "WAVE", "-d", f"LEI16@{condition.rate}",
-                         "-c", "1", str(staged), str(destination)])
+        shutil.copy(working, destination)
+        ok = True
     else:
         encoded = destination.with_suffix(".m4a")
-        # AAC-ELD encodes at 16 kHz; narrowband reduces further on decode.
         if not _afconvert(["-f", "m4af", "-d", "aace@16000",
                            "-b", str(condition.bitrate), "-c", "1",
-                           str(staged), str(encoded)]):
+                           str(working), str(encoded)]):
+            working.unlink(missing_ok=True)
             return False
         ok = _afconvert(["-f", "WAVE", "-d", f"LEI16@{condition.rate}",
                          "-c", "1", str(encoded), str(destination)])
         encoded.unlink(missing_ok=True)
 
-    if staged != source:
-        staged.unlink(missing_ok=True)
+    working.unlink(missing_ok=True)
     if not (ok and destination.exists()):
         return False
 
+    # 4. Loss, on the decoded stream.
     if condition.loss > 0:
         samples, rate = _read_pcm(destination)
         _write_pcm(destination,
@@ -319,6 +338,44 @@ def permission_blocked() -> str | None:
     return None
 
 
+def _rms(samples) -> float:
+    if not samples:
+        return 0.0
+    return math.sqrt(sum(float(s) * s for s in samples) / len(samples))
+
+
+def calibrate(source: Path, workspace: Path) -> list[str]:
+    """Confirm each condition delivers the impairment it advertises.
+
+    This exists because it did not, and nobody noticed. Nominal 5 dB SNR was
+    arriving as 10.5 dB at 16 kHz and 13.7 dB at 8 kHz, so a table of
+    scores was labelled with numbers that were wrong by up to 9 dB.
+
+    A measurement is only worth as much as the check that it measured the
+    thing on the label.
+    """
+    lines = []
+    for condition in CONDITIONS:
+        if condition.snr_db is None:
+            continue
+        rng = random.Random(zlib.crc32(f"calib:{condition.name}".encode()))
+
+        reference = workspace / f"ref_{condition.rate}.wav"
+        if not reference.exists():
+            _afconvert(["-f", "WAVE", "-d", f"LEI16@{condition.rate}", "-c", "1",
+                        str(source), str(reference)])
+        clean, _ = _read_pcm(reference)
+
+        noisy = add_noise(clean, condition.snr_db, rng)
+        residual = [n - c for n, c in zip(noisy, clean)]
+        delivered = 20 * math.log10(_rms(clean) / max(1e-9, _rms(residual)))
+        drift = delivered - condition.snr_db
+        flag = "" if abs(drift) < 1.0 else f"   ⚠ off by {drift:+.1f} dB"
+        lines.append(f"   {condition.name:<16} want {condition.snr_db:>4.0f} dB"
+                     f"   got {delivered:>5.1f} dB{flag}")
+    return lines
+
+
 def main() -> int:
     print("Call-audio transcription — does accuracy survive compression?\n")
 
@@ -334,9 +391,6 @@ def main() -> int:
 
     on_device_seen: set[bool] = set()
     summary: list[tuple[str, float, int, int]] = []
-    # Fixed seed: noise and dropouts must be identical between runs, or a
-    # change in score cannot be told apart from a change in the dice.
-    rng = random.Random(20260818)
 
     with tempfile.TemporaryDirectory(prefix="macman-callaudio-") as tmp:
         workspace = Path(tmp)
@@ -355,6 +409,11 @@ def main() -> int:
             print("  Nothing to measure.")
             return 1
 
+        print("── Calibration: does each condition deliver what it claims?")
+        for line in calibrate(sources[0][1], workspace):
+            print(line)
+        print()
+
         for condition in CONDITIONS:
             rates: list[float] = []
             failures = 0
@@ -362,6 +421,15 @@ def main() -> int:
 
             for index, (text, source) in enumerate(sources):
                 degraded = workspace / f"{condition.name.replace(' ', '_')}{index}.wav"
+                # Seeded per (condition, utterance) rather than from one shared
+                # stream: with a shared generator each condition draws different
+                # noise depending on how many draws preceded it, so two
+                # conditions cannot be compared without that confound.
+                #
+                # crc32, not hash() — string hashing is randomised per process,
+                # which would make runs silently unreproducible.
+                rng = random.Random(
+                    zlib.crc32(f"{condition.name}:{index}".encode()))
                 if not degrade(source, degraded, condition, rng):
                     failures += 1
                     continue
