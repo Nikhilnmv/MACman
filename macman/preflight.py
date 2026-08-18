@@ -71,6 +71,40 @@ def run_checks() -> list[Check]:
     ]
 
 
+def _report_engine() -> None:
+    """Report whether the on-device engine can actually use tools.
+
+    Worth its own check because the failure is silent and total. The helper
+    only gets tool support when built with `-DMACMAN_TOOLS`, which needs full
+    Xcode; a plain `swift build` produces a binary that compiles, runs, reports
+    itself available, and then answers every question from the model's own head
+    instead of looking anything up.
+
+    Nothing warns you. A rebuild without the flag took tool selection from 99%
+    to 0% here, and the only visible symptom was MACman becoming vague and
+    unhelpful. That is worth one line at startup.
+    """
+    from macman.engines import local as local_engine
+
+    try:
+        backend = local_engine.apple_backend()
+    except Exception:
+        return  # never let a status line break preflight
+
+    if not backend.available:
+        print(f"  Engine    on-device model unavailable — {backend.detail}\n")
+        return
+    if not backend.tools:
+        print("  Engine    ⚠ on-device model READY BUT WITHOUT TOOLS\n")
+        print("            It cannot count files, read folders or open apps;")
+        print("            it will answer from memory instead of looking.")
+        print("            Rebuild with the flag that enables tool support:")
+        print("              cd helpers && swift build -c release "
+              "-Xswiftc -DMACMAN_TOOLS\n")
+        return
+    print("  Engine    on-device model ready, tools enabled\n")
+
+
 def main() -> int:
     """Report what MACman can do right now, and what one more grant unlocks.
 
@@ -87,6 +121,8 @@ def main() -> int:
     print("MACman\n")
     print(f"  Session   {state.user_name or '(none)'}")
     print(f"  Tier      {state.tier.value} — {state.explain()}\n")
+
+    _report_engine()
 
     print(f"  Working now ({len(working)})")
     for capability in working:

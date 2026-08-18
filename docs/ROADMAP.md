@@ -128,32 +128,48 @@ works, speakers untouched.
 |---|---|---|
 | Does `AutoAcceptInvites` still work on macOS 26? | ⏸ needs a call | click Accept via Accessibility |
 | Do taps capture FaceTime specifically? | ⏸ needs a call | BlackHole as system output, worse but works |
-| **Is transcription accurate on compressed call audio?** | 🔬 built, needs you to run it | cloud speech-to-text; moves voice to the paid tier |
-| Is FaceTime's Accessibility tree drivable? | 🔬 built, needs you to run it | URL schemes only; fewer controls |
+| **Is transcription accurate on compressed call audio?** | ✅ **yes** | — |
+| Is FaceTime's Accessibility tree drivable? | ⚠ partly | URL schemes only; fewer controls |
 
-The third is the one I'd bet against. The clean-mic test was perfect; a
-FaceTime call is a different signal entirely. `tests/tasks/call_audio.py` now
-measures it with **AAC-ELD, the codec FaceTime actually uses**, against
-synthesised speech with a known transcript — so it can be scored rather than
-judged by ear.
+**The third one resolved, against my prediction.** I said I'd bet against it.
+AAC-ELD at 24 kbps costs nothing, 10% packet loss costs nothing, and only
+background noise below ~10 dB SNR degrades anything — worst case 9.8% WER on a
+deliberately terrible call. More to the point, **those errors changed no
+actions**: replaying the degraded transcripts scored 17/18 correct against
+16/18 clean. `Downloads → download` still produced `folder="Downloads"`.
 
-**Both must be run from Terminal, not from an assistant.** macOS attributes a
-permission to the app that launched the process, so a tool running under
-another app is `notDetermined` even where you have already granted it:
+Voice-over-FaceTime does not need cloud speech-to-text, and stays free.
+Two earlier versions of that experiment were wrong before this one was right —
+[RELIABILITY.md](RELIABILITY.md#call-audio--the-prediction-was-wrong) has both.
+
+**The fourth is a partial, and it is now the risk.** The Accessibility tree is
+readable (19 nodes, 7 buttons), but **4 of 7 buttons carry no label**. An
+unlabelled control can only be addressed by tree position — the same weakness
+that measured 50% and got Accessibility clicking dropped from production.
+
+So everything now turns on one question: **is Accept labelled during an
+incoming call?**
+
+- If yes — calls are answered under allowlist control, which is the design.
+- If no — the fallback is `AutoAcceptInvites`, which answers *everyone who
+  calls*. That is a worse trade than it sounds, and I would rather ship
+  FaceTime late than ship that as the default.
+
+`AutoAcceptInvites` is **not** set on this Mac, deliberately.
+
+To re-run either experiment, use Terminal — macOS attributes permissions to the
+launching app, so they are `notDetermined` under anything else:
 
 ```bash
 cd ~/Documents/MACMan
 .venv/bin/python tests/tasks/call_audio.py       # transcription vs call quality
+.venv/bin/python tests/tasks/degraded_intent.py  # do bad transcripts change actions
 .venv/bin/python tests/tasks/facetime_probe.py   # is FaceTime's UI drivable
 ```
 
-**Already found without a second device:** FaceTime ships no `.sdef`, so
-AppleScript is out — it is URL schemes plus Accessibility, which makes the
-fourth experiment load-bearing rather than a nicety.
-
-`AutoAcceptInvites` is **not** set on this Mac, and is deliberately left unset:
-blanket auto-answer would let anyone who calls connect. Answering should be
-gated on the allowlist, which is what the Accessibility path buys.
+**Also found:** FaceTime ships no `.sdef`, so AppleScript is out entirely — it
+is URL schemes plus Accessibility, which is why the fourth experiment is
+load-bearing rather than a nicety.
 
 **Done when:** you call your Mac from another room, ask for something out
 loud, and it answers.

@@ -20,6 +20,7 @@ in another on identical inputs.
 | **Tool selection** | **99%** (104/105, 18 tools) |
 | **Answer correctness, single tool** | **100%** (8/8) |
 | **Multi-tool chaining** | **100%** (9/9 across 2- and 3-tool tasks) |
+| **Transcription, worst call audio** | **9.8% WER** — and **0** change in action taken |
 | Accessibility navigation | **50%** — not used in production |
 | **Outbound connections, private task** | **0** — audited, Python *and* Swift |
 | **Adversarial attacks resisted** | **23/23** — after one real leak was found and fixed |
@@ -233,6 +234,86 @@ schemes over UI automation.
 
 ---
 
+## Call audio — the prediction was wrong
+
+The plan said transcription would fail on compressed call audio, and named it
+the experiment most likely to kill voice-over-FaceTime. It didn't fail.
+
+Method: macOS `say` produces speech with an exact known transcript — the ground
+truth a microphone test can never have — which is then degraded and transcribed
+by the same on-device recogniser MACman uses. Encoding is **AAC-ELD via
+`afconvert`**, the codec FaceTime actually uses, not a stand-in.
+
+| Condition | Mean WER | Exact |
+|---|---|---|
+| Clean 48 kHz reference | 0.0% | 6/6 |
+| AAC-ELD 24 kbps (codec only) | 0.0% | 6/6 |
+| Narrowband 8 kHz | 0.0% | 6/6 |
+| Background noise, 20 dB SNR | 0.0% | 6/6 |
+| Background noise, 10 dB SNR | 0.0% | 6/6 |
+| Background noise, 5 dB SNR | 1.9% | 5/6 |
+| 2% packet loss | 0.0% | 6/6 |
+| 5% packet loss | 0.0% | 6/6 |
+| 10% packet loss | 0.0% | 6/6 |
+| Bad call (10 dB + 5% loss) | 1.9% | 5/6 |
+| **Terrible call** (5 dB + 10% loss, 8 kHz, 16 kbps) | **9.8%** | 2/6 |
+
+**The codec is a non-issue, and so is packet loss.** 10% of 20 ms packets
+dropped cost nothing measurable; speech is redundant enough to absorb it. Only
+background noise below about 10 dB SNR degrades anything.
+
+### Two wrong versions came first
+
+**Version 1 varied only bitrate and sample rate, and scored 0.0% everywhere.**
+That was nearly recorded as a pass. It isn't one: when the hardest condition
+scores exactly like the easiest, the test has not shown robustness, it has
+shown that nothing in it was hard enough to discriminate. It also varied the
+least damaging property of a call.
+
+**Version 2 added noise and loss, and inverted itself.** "Terrible call" scored
+*better* than plain 5 dB noise. Adding damage cannot improve accuracy, and that
+contradiction exposed a real bug: noise was added at 48 kHz before resampling,
+so its energy spread to 24 kHz and resampling discarded most of it. Measured
+here, a nominal 5 dB SNR arrived as **10.5 dB at 16 kHz and 13.7 dB at 8 kHz** —
+labels wrong by up to 9 dB, and the harshest-looking condition was the mildest.
+
+Fixed by resampling first and adding noise in-band. The experiment now
+calibrates itself before scoring anything and refuses to be trusted if delivered
+SNR drifts more than 1 dB from the label.
+
+## What the errors actually cost — nothing
+
+WER is the wrong measure here. The errors bad audio produces are
+`Downloads → download`, `Documents → document`, `emails → mails`, and a dropped
+`please`. They cost WER points without changing what the user wants.
+
+The failure that would matter is subtler: right tool, **wrong argument**.
+`folder="download"` does not exist, so MACman would answer "download does not
+exist or is not a folder" — a precise, confident, useless reply to a question
+the user asked correctly.
+
+Measured by replaying the real degraded transcripts through the engine
+(`tests/tasks/degraded_intent.py`), scoring tool *and* arguments:
+
+| | Correct tool | Correct action |
+|---|---|---|
+| Clean transcript | 16/18 | 16/18 |
+| Degraded transcript | 17/18 | 17/18 |
+
+**Mis-transcription changed nothing.** The argument stayed correct every time —
+`download folder` still produced `folder="Downloads"`. The degraded score is
+one trial *higher*, which is noise at this sample size, not an effect.
+
+Both misses are the same request, "Open Safari and check the battery level",
+which asks for two things at once and splits between `open_app` and
+`system_info` on clean audio too. It measures ambiguity, not audio damage, and
+is kept rather than removed because dropping it would flatter the result.
+
+**Sample is small** — 18 trials over 6 requests. Enough to rule out a large
+effect, not to detect a small one. And synthesised speech has no accent, no
+hesitation and perfect articulation, so all of this remains an optimistic bound
+until a real call is tested.
+
 ## Attacked, not asserted — 23/23
 
 Every security property here was a *claim* until it was attacked
@@ -396,6 +477,19 @@ output.
 **Every field must be Optional or omission is fatal.** `@Generable` requires
 all fields; the model correctly omitting an unused one raised
 `decodingFailure`. Several tools were passing on luck until this was found.
+
+**A plain `swift build` silently disables every tool.** The helper only gets
+tool support when built with `-DMACMAN_TOOLS`, which needs full Xcode. Without
+it the binary compiles, runs, reports itself available — and calls no tools at
+all. Rebuilding without the flag took tool selection from **99% to 0%**, with
+no error anywhere; the only symptom was MACman becoming vague.
+
+Worse, it silently invalidated a benchmark. An experiment comparing two
+conditions scored 0/18 on both and concluded "mis-transcription did not
+meaningfully change what happened" — tidy, confident and entirely false, since
+a difference between two broken runs is zero. **A broken control reads as
+reassurance, which is worse than an error.** `preflight` now reports engine
+tool status, and the benchmarks refuse to run without it.
 
 **A permission is attributed to the app that launched the process, not to
 MACman.** Running the same binary from Terminal and from another app gives

@@ -123,6 +123,22 @@ def main() -> int:
     tool_names = [tool.to_dict()["name"] for tool in LOCAL_TOOLS]
     print(f"Tool selection accuracy — {len(tool_names)} tools, "
           f"{len(CASES)} tasks, {args.trials} trials each")
+
+    # A helper built without `-DMACMAN_TOOLS` calls no tools at all, so every
+    # case scores 0 and the benchmark reports a catastrophic regression that is
+    # really a build flag. Observed: a plain `swift build` silently took this
+    # from 99% to 0%, with no error anywhere.
+    backend = local_engine.apple_backend()
+    if not backend.available:
+        print(f"\n  BLOCKED: on-device model unavailable — {backend.detail}")
+        return 2
+    if not backend.tools:
+        print("\n  BLOCKED: helper built WITHOUT tool support — every case "
+              "would score 0.")
+        print("  Rebuild with:")
+        print("    cd helpers && swift build -c release -Xswiftc -DMACMAN_TOOLS")
+        return 2
+
     print("Nothing is executed; tool calls are stubbed.\n")
 
     chosen: list[str] = []
