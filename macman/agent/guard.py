@@ -87,7 +87,13 @@ def _denied_path_touched(text: str) -> str | None:
 
     Matches on the literal path *and* on the `~`-relative form, since a command
     string is checked before any shell expansion happens.
+
+    Compared **case-folded**: macOS filesystems are case-insensitive by
+    default, so `~/.SSH/id_ed25519` opens the same file as `~/.ssh/…`. An
+    audit confirmed a case-sensitive check let that through and leaked real
+    key material, so spelling must not be what decides this.
     """
+    folded_text = text.casefold()
     for denied in config.DENIED_READ_PATHS:
         candidates = [str(denied)]
         try:
@@ -95,7 +101,7 @@ def _denied_path_touched(text: str) -> str | None:
         except ValueError:
             pass
         for candidate in candidates:
-            if candidate in text:
+            if candidate.casefold() in folded_text:
                 return candidate
     return None
 

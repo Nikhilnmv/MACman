@@ -22,6 +22,7 @@ Claude keeps raw `bash` — it writes correct commands and needs the generality.
 
 from __future__ import annotations
 
+import os
 import shlex
 from pathlib import Path
 
@@ -40,11 +41,48 @@ class PathRefused(ValueError):
     """Raised when an argument names a path the tools must not read."""
 
 
+def _within(candidate: Path, protected: Path) -> bool:
+    """Whether `candidate` is, or is inside, `protected`.
+
+    Three checks, because any one alone has been shown to be bypassable:
+
+    1. **Resolved prefix** — catches `..` traversal and symlinks, since
+       `resolve()` follows both.
+    2. **Case-folded prefix** — macOS filesystems are case-insensitive by
+       default, so `~/.SSH/id_ed25519` opens the same file as `~/.ssh/…`.
+       A purely case-sensitive comparison let that through, and an audit
+       confirmed it leaked real key material.
+    3. **Identity** — where both paths exist, compare inode rather than
+       spelling, which also catches hard links and firmlinks.
+    """
+    try:
+        if candidate == protected or candidate.is_relative_to(protected):
+            return True
+    except ValueError:
+        pass
+
+    folded = str(candidate).casefold()
+    protected_folded = str(protected).casefold()
+    if folded == protected_folded or folded.startswith(protected_folded + os.sep):
+        return True
+
+    # Walk upward: the file itself may not exist, but a parent will.
+    for parent in [candidate, *candidate.parents]:
+        try:
+            if parent.exists() and protected.exists() and parent.samefile(protected):
+                return True
+        except OSError:
+            continue
+        if parent == parent.parent:      # reached the root
+            break
+    return False
+
+
 def _safe_folder(raw: str) -> Path:
-    """Resolve a user-supplied folder and refuse protected locations.
+    """Resolve a user-supplied path and refuse protected locations.
 
     Enforced here rather than left to the guard's regexes: the model supplies a
-    *value*, not a command string, so this is an exact check instead of a
+    *value*, not a command string, so this is an exact check rather than a
     pattern match that could be worded around.
     """
     candidate = Path(raw.strip()).expanduser()
@@ -53,7 +91,7 @@ def _safe_folder(raw: str) -> Path:
     resolved = candidate.resolve()
 
     for denied in config.DENIED_READ_PATHS:
-        if resolved == denied or resolved.is_relative_to(denied):
+        if _within(resolved, denied):
             raise PathRefused(f"{raw} is a protected location and cannot be read.")
     return resolved
 
