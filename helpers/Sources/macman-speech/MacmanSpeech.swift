@@ -170,11 +170,17 @@ func outputDeviceNames() -> [String] {
             mSelector: kAudioObjectPropertyName,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain)
-        var name: CFString = "" as CFString
-        var nameSize = UInt32(MemoryLayout<CFString>.size)
-        guard AudioObjectGetPropertyData(id, &nameAddress, 0, nil, &nameSize, &name) == noErr
-        else { return nil }
-        return name as String
+        // `Unmanaged<CFString>?`, not `CFString`. Core Audio writes a +1
+        // retained CFStringRef into this address, which ARC neither knows to
+        // release nor expects to appear. Passing a managed `CFString` also
+        // hands Core Audio a pointer to an ARC-owned reference and leaks the
+        // placeholder it overwrites — the compiler flags exactly this.
+        var name: Unmanaged<CFString>?
+        var nameSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(
+                  id, &nameAddress, 0, nil, &nameSize, &name) == noErr,
+              let name else { return nil }
+        return name.takeRetainedValue() as String
     }
 }
 
@@ -320,11 +326,16 @@ func outputDeviceID(named wanted: String) -> AudioDeviceID? {
             mSelector: kAudioObjectPropertyName,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain)
-        var name: CFString = "" as CFString
-        var nameSize = UInt32(MemoryLayout<CFString>.size)
+        // See the note in `outputDeviceNames`: Core Audio returns a +1
+        // retained reference, so it must be taken as retained rather than
+        // written into an ARC-managed variable.
+        var name: Unmanaged<CFString>?
+        var nameSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         guard AudioObjectGetPropertyData(
-            id, &nameAddress, 0, nil, &nameSize, &name) == noErr else { continue }
-        if (name as String).localizedCaseInsensitiveContains(wanted) { return id }
+                  id, &nameAddress, 0, nil, &nameSize, &name) == noErr,
+              let name else { continue }
+        if (name.takeRetainedValue() as String)
+            .localizedCaseInsensitiveContains(wanted) { return id }
     }
     return nil
 }

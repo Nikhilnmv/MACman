@@ -149,7 +149,7 @@ struct ReadFileTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> String {
-        ToolChannel.request("read_file", ["path": arguments.path ?? ""])
+        ToolChannel.request("read_file", ["path": arguments.path])
     }
 }
 
@@ -189,7 +189,7 @@ struct OpenAppTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> String {
-        ToolChannel.request("open_app", ["name": arguments.name ?? ""])
+        ToolChannel.request("open_app", ["name": arguments.name])
     }
 }
 

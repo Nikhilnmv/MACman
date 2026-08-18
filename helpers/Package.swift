@@ -30,9 +30,14 @@ let package = Package(
         .executableTarget(name: "macman-state", path: "Sources/macman-state"),
         .executableTarget(name: "macman-ax", path: "Sources/macman-ax"),
         .executableTarget(name: "macman-local", path: "Sources/macman-local"),
+        // `exclude` because Info.plist is a *linker input*, not a resource.
+        // SwiftPM otherwise warns about an unhandled file on every build, and
+        // bundling it would embed a second, ignored copy.
         .executableTarget(name: "macman-speech", path: "Sources/macman-speech",
+                          exclude: ["Info.plist"],
                           linkerSettings: embedInfoPlist("macman-speech")),
         .executableTarget(name: "macman-audio", path: "Sources/macman-audio",
+                          exclude: ["Info.plist"],
                           linkerSettings: embedInfoPlist("macman-audio")),
     ]
 )
