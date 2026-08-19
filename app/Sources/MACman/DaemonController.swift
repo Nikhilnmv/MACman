@@ -70,6 +70,11 @@ final class DaemonController: ObservableObject {
         // Unbuffered, or status lines sit in a pipe buffer and the menu bar
         // shows stale state for as long as it takes to fill 4 KB.
         environment["PYTHONUNBUFFERED"] = "1"
+        // The daemon infers the helpers' location from its own file path,
+        // which is the repository layout and is wrong inside a bundle.
+        if let helpers = python.helpers {
+            environment["MACMAN_HELPERS_BIN"] = helpers.path
+        }
         task.environment = environment
 
         let outPipe = Pipe()
@@ -193,6 +198,9 @@ final class DaemonController: ObservableObject {
     struct Runtime {
         let interpreter: URL
         let workingDirectory: URL
+        /// Where the Swift helpers live. `nil` lets the daemon fall back to
+        /// its own repository-relative default, which is right in development.
+        let helpers: URL?
     }
 
     /// Find the Python that runs the daemon.
@@ -209,7 +217,9 @@ final class DaemonController: ObservableObject {
             let embedded = resources.appendingPathComponent("python/bin/python3")
             let payload = resources.appendingPathComponent("daemon")
             if FileManager.default.isExecutableFile(atPath: embedded.path) {
-                return Runtime(interpreter: embedded, workingDirectory: payload)
+                return Runtime(interpreter: embedded,
+                               workingDirectory: payload,
+                               helpers: resources.appendingPathComponent("helpers"))
             }
         }
 
@@ -224,7 +234,7 @@ final class DaemonController: ObservableObject {
 
         let venv = repo.appendingPathComponent(".venv/bin/python3")
         if FileManager.default.isExecutableFile(atPath: venv.path) {
-            return Runtime(interpreter: venv, workingDirectory: repo)
+            return Runtime(interpreter: venv, workingDirectory: repo, helpers: nil)
         }
         return nil
     }

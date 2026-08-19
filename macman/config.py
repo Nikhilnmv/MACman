@@ -16,6 +16,7 @@ See DESIGN.md §3 (routing) and §6 (security).
 
 from __future__ import annotations
 
+import os
 from enum import Enum
 from pathlib import Path
 
@@ -147,4 +148,15 @@ SCRUBBED_ENV_VARS: frozenset[str] = frozenset({
 
 STATE_DIR = userconfig.STATE_DIR
 AUDIT_LOG = STATE_DIR / "audit.jsonl"
-HELPERS_BIN = Path(__file__).resolve().parent.parent / "helpers" / ".build" / "release"
+#: Where the Swift helpers live.
+#:
+#: Derived from the repository layout during development, and overridden by
+#: `MACMAN_HELPERS_BIN` when the daemon runs inside MACman.app — there the
+#: helpers sit in the bundle's Resources, not next to this file. Inferring it
+#: from `__file__` alone breaks the moment the package is copied anywhere.
+HELPERS_BIN = Path(
+    os.environ.get(
+        "MACMAN_HELPERS_BIN",
+        Path(__file__).resolve().parent.parent / "helpers" / ".build" / "release",
+    )
+)

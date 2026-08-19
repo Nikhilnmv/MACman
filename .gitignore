@@ -28,3 +28,4 @@ private/
 # Assembled app bundle
 app/build/
 app/.build/
+app/.cache/

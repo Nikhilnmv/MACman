@@ -35,7 +35,13 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 CONFIGURATION="debug"
-[[ "${1:-}" == "--release" ]] && CONFIGURATION="release"
+EMBED=0
+for argument in "$@"; do
+    case "$argument" in
+        --release) CONFIGURATION="release" ;;
+        --embed)   EMBED=1 ;;
+    esac
+done
 
 APP_NAME="MACman"
 BUNDLE="build/${APP_NAME}.app"
@@ -58,17 +64,38 @@ cp "${BINARY}" "${BUNDLE}/Contents/MacOS/${APP_NAME}"
 cp Resources/Info.plist "${BUNDLE}/Contents/Info.plist"
 printf 'APPL????' > "${BUNDLE}/Contents/PkgInfo"
 
-# Phase C runs the daemon from the repository's virtualenv, so the bundle
-# carries no Python yet. Embedding a relocatable interpreter is phase C's
-# second half; DaemonController falls back to the repo until it exists.
+# Without --embed the daemon runs from the repository's virtualenv, which is
+# what you want while developing: no 60 MB copy per build, and edits to the
+# Python take effect on the next launch rather than the next bundle.
+if [[ "${EMBED}" == "1" ]]; then
+    ./embed_runtime.sh "${BUNDLE}"
+else
+    echo "── No runtime embedded (development build)"
+    echo "   the daemon will run from the repository's .venv"
+fi
 
 echo "── Signing"
+
+IDENTITY="-"
 if security find-identity -v -p codesigning 2>/dev/null | grep -q "${DEV_IDENTITY}"; then
-    codesign --force --deep --sign "${DEV_IDENTITY}" \
-             --options runtime "${BUNDLE}" 2>&1 | sed 's/^/   /'
+    IDENTITY="${DEV_IDENTITY}"
+fi
+
+# Nested code must be signed before the bundle that contains it, innermost
+# first — signing the outside first records hashes that the inner signatures
+# then invalidate. `--deep` does this too but is deprecated and papers over
+# exactly the ordering mistakes worth seeing.
+if [[ -d "${BUNDLE}/Contents/Resources" ]]; then
+    while IFS= read -r nested; do
+        codesign --force --sign "${IDENTITY}" "${nested}" 2>/dev/null || true
+    done < <(find "${BUNDLE}/Contents/Resources" -type f -perm +111 2>/dev/null)
+fi
+
+codesign --force --sign "${IDENTITY}" "${BUNDLE}" 2>&1 | sed 's/^/   /'
+
+if [[ "${IDENTITY}" != "-" ]]; then
     echo "   signed with '${DEV_IDENTITY}' — permissions persist across rebuilds"
 else
-    codesign --force --deep --sign - "${BUNDLE}" 2>&1 | sed 's/^/   /'
     cat <<'WARNING'
    signed ad-hoc.
 
