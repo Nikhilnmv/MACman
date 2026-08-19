@@ -55,6 +55,18 @@ def set_context(context: ToolContext) -> None:
     _context.set(context)
 
 
+def current_context() -> ToolContext | None:
+    """The active session's context, or None when there is no owner to ask.
+
+    Exposed for tools that need more than a yes/no — `claude_code` builds a
+    full egress Disclosure and needs the audit log and session id to record
+    it. Returning None rather than raising keeps the fail-closed contract:
+    every caller must decide what "nobody is here" means for them, and for
+    anything that sends data the answer is refuse.
+    """
+    return _context.get()
+
+
 def require_confirmation(reason: str, summary: str) -> bool:
     """Ask the owner to approve an action, from inside a tool.
 

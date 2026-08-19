@@ -100,8 +100,14 @@ class Disclosure:
     reason: str
     #: What leaves. For SCOPE, what *may* leave.
     payload: tuple[PayloadItem, ...] = ()
-    #: Named as untouched. Checkable, unlike a promise.
+    #: Named as untouched. Checkable, unlike a promise. Only put things here
+    #: that are genuinely guaranteed — an exclusion that turns out to be
+    #: aspirational is worse than saying nothing.
     excluded: tuple[str, ...] = ()
+    #: Something the user is worse off for not knowing. Rendered separately
+    #: from `excluded`, because a caveat filed under "not included" reads as
+    #: reassurance and is the opposite.
+    warning: str = ""
     billing: str = ""
     #: Matched against pre-approvals; None means no path is involved.
     path: Path | None = None
@@ -109,10 +115,19 @@ class Disclosure:
     category: str = "general"
 
     def headline(self) -> str:
+        """The first line, and the one most likely to be the only line read.
+
+        Destination-aware because the two senders are honest about different
+        things. A single generic sentence would overstate one of them, and the
+        overstatement would always be in the reassuring direction.
+        """
         if self.precision is Precision.EXACT:
             return f"This sends data to {self.destination.label}."
-        return (f"This hands the task to {self.destination.label}, which will "
-                f"read files on its own.")
+        if self.destination is Destination.CLAUDE_CLI:
+            return (f"This hands the task to {self.destination.label}, which "
+                    f"will read files on its own.")
+        return (f"This sends your request to {self.destination.label}. "
+                f"Whatever Claude then looks up is sent too.")
 
     def as_lines(self) -> list[str]:
         """Rendered for a dialog: short lines, most important first."""
@@ -121,18 +136,35 @@ class Disclosure:
 
         if self.payload:
             lines.append("")
-            lines.append("Sends exactly:" if self.precision is Precision.EXACT
-                         else "May read anything in:")
+            lines.append(self._payload_heading())
             lines.extend(f"  • {item.render()}" for item in self.payload)
 
         if self.excluded:
             lines.append("")
             lines.append(f"Not included: {', '.join(self.excluded)}")
 
+        if self.warning:
+            lines.append("")
+            lines.append(f"⚠ {self.warning}")
+
         if self.billing:
             lines.append("")
             lines.append(f"Cost: {self.billing}")
         return lines
+
+    def _payload_heading(self) -> str:
+        """Heading over the payload list.
+
+        Three cases rather than two. "May read anything in" is right for a
+        folder handed to Claude Code, and wrong for an API request, where the
+        request itself goes exactly and only what follows is open-ended.
+        Using one heading for both mislabels whichever it was not written for.
+        """
+        if self.precision is Precision.EXACT:
+            return "Sends exactly:"
+        if self.destination is Destination.CLAUDE_CLI:
+            return "May read anything in:"
+        return "Sends:"
 
     def as_text(self) -> str:
         """Rendered for a message or spoken aloud."""
@@ -180,6 +212,37 @@ class PreApproval:
             return False
         return path_within(disclosure.path.expanduser().resolve(),
                            self.path_prefix.expanduser().resolve())
+
+    def describe(self) -> str:
+        """One line for the settings UI, in the user's terms."""
+        remaining = max(0, int((self.expires_at - time.time()) // 86_400))
+        return (f"{self.category} tasks under {self.path_prefix} "
+                f"— {remaining} day(s) left")
+
+
+def load_pre_approvals() -> tuple[PreApproval, ...]:
+    """Read standing permissions from the user's config.
+
+    Absent or malformed entries yield *nothing* rather than a default rule.
+    A parsing bug must not be able to invent consent, so every failure here
+    means "ask the owner".
+    """
+    from macman import userconfig
+
+    # Read fresh rather than cached: revoking a pre-approval in Settings has
+    # to take effect on the next task, not the next restart.
+    raw = userconfig.load().get("cloud_preapprovals") or []
+    rules: list[PreApproval] = []
+    for entry in raw:
+        try:
+            rules.append(PreApproval(
+                category=str(entry["category"]),
+                path_prefix=Path(str(entry["path"])).expanduser(),
+                expires_at=float(entry["expires_at"]),
+            ))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return tuple(rules)
 
 
 # --------------------------------------------------------------------------- #

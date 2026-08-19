@@ -20,8 +20,40 @@ import anthropic
 from macman import config
 from macman.agent import prompts
 from macman.agent.tools.registry import ALL_TOOLS, ToolContext, set_context
-from macman.security import lockstate
+from macman.security import egress, lockstate
 from macman.security.audit import AuditLog
+
+
+def _disclose(task: str) -> egress.Disclosure:
+    """Describe what a cloud task actually sends — including what follows.
+
+    **This is deliberately `SCOPE`, not `EXACT`.** The request itself is known
+    precisely, but the Tool Runner sends tool *results* back on every
+    iteration, and Claude chooses which tools to run. A `bash` call that reads
+    a file transmits that file. Nothing here can enumerate that in advance.
+
+    `excluded` therefore lists only what is refused **in code** — the
+    credential paths, which the guard blocks regardless of what any model asks
+    for. Listing "Documents" or "Mail" would read better and be untrue: a
+    cloud-routed task can read a document and the result goes to Anthropic.
+    The router keeps personal work away from here, but that is a routing
+    decision, not a guarantee about this request.
+    """
+    denied = ", ".join(path.name for path in config.DENIED_READ_PATHS)
+    return egress.Disclosure(
+        destination=egress.Destination.ANTHROPIC_API,
+        precision=egress.Precision.SCOPE,
+        reason=task,
+        payload=(
+            egress.PayloadItem("your request", f"{len(task.split())} words",
+                               preview=task[:120]),
+            egress.PayloadItem("anything Claude looks up while working",
+                               "file contents, command output"),
+        ),
+        excluded=(f"credential paths ({denied}) — refused in code",),
+        billing="Metered Anthropic API key — billed per token",
+        category="cloud",
+    )
 
 #: USD per million tokens for `claude-opus-5`. Cache writes cost 1.25x input,
 #: cache reads 0.1x — the reason the stable prompt carries a breakpoint.
@@ -120,6 +152,19 @@ class CloudEngine:
         """
         state = lockstate.read()
 
+        # Nothing reaches Anthropic until the owner has seen what would go.
+        # Before any client is touched, because the point of a choke point is
+        # that there is no path around it.
+        disclosure = _disclose(task)
+        authorisation = egress.authorise(
+            disclosure,
+            ask=confirm,
+            audit=self.audit,
+            session_id=session_id,
+            pre_approvals=egress.load_pre_approvals(),
+        )
+        egress.guard(authorisation, disclosure)
+
         set_context(ToolContext(
             session_id=session_id,
             engine="cloud",
@@ -130,6 +175,7 @@ class CloudEngine:
         self.audit.session(
             session_id=session_id, event="task_start", engine="cloud",
             tier=state.tier.value, task=task[:400],
+            egress=authorisation.basis,
         )
 
         messages = list(history or []) + [{"role": "user", "content": task}]

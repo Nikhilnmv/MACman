@@ -35,6 +35,10 @@ DEFAULTS: dict[str, Any] = {
     "session_idle_minutes": 30,
     "wake_timeout_seconds": 120,
     "attach_screenshot": True,
+    #: Standing permission to send a narrow class of task to a cloud model
+    #: without asking each time. Empty means everything asks, which is the
+    #: default on purpose — see security/egress.py.
+    "cloud_preapprovals": [],
 }
 
 _TEMPLATE = """\

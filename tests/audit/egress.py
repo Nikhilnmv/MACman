@@ -249,16 +249,81 @@ def bypass_checks() -> list[Check]:
         not offenders,
         "no bypass found" if not offenders else "; ".join(offenders[:3])))
 
-    # The wiring itself is phase B; state plainly that it has not happened yet
-    # rather than letting this audit imply more than it checks.
-    cloud = (ROOT / "macman/engines/cloud.py").read_text()
-    dev = (ROOT / "macman/agent/tools/dev.py").read_text()
-    wired = "egress" in cloud and "egress" in dev
-    results.append(Check(
-        "egress is wired into both senders",
-        wired,
-        "wired" if wired else "NOT YET — phase B; the gate exists but is unused"))
+    return results
 
+
+# --------------------------------------------------------------------------- #
+# 5. The senders actually refuse — behaviour, not a grep
+# --------------------------------------------------------------------------- #
+
+
+def wiring_checks() -> list[Check]:
+    """Prove a refusal stops each sender, rather than that they import egress.
+
+    Checking for the word "egress" in a file would pass on an import that is
+    never called. These drive the real code paths with an asker that always
+    says no, and assert nothing was sent.
+    """
+    import tempfile
+
+    from macman.agent.tools import dev, registry
+    from macman.security.audit import AuditLog as _AuditLog
+
+    results: list[Check] = []
+
+    # --- claude_code -------------------------------------------------------
+    asked: list[str] = []
+
+    def refuse(reason: str, summary: str) -> bool:
+        asked.append(summary)
+        return False
+
+    registry.set_context(registry.ToolContext(
+        session_id="egress-audit", engine="local", audit=_AuditLog(),
+        confirm=refuse))
+
+    with tempfile.TemporaryDirectory(prefix="macman-egress-") as tmp:
+        reply = str(dev.claude_code.call({"task": "fix the tests", "project": tmp}))
+
+    refused = "refus" in reply.lower() or "nothing was sent" in reply.lower()
+    results.append(Check("claude_code refuses when the owner says no", refused,
+                         reply[:34]))
+    results.append(Check("claude_code disclosed before sending", bool(asked),
+                         "owner was shown the payload" if asked
+                         else "NO DISCLOSURE SHOWN"))
+
+    # The disclosure must warn that MACman's protections stop at the CLI —
+    # the single most important fact about this handoff.
+    warned = any("do not apply" in text.lower() or "does not apply" in text.lower()
+                 or "credential blocks" in text.lower() for text in asked)
+    results.append(Check("claude_code warns its protections do not apply", warned,
+                         "stated" if warned else "SILENT ABOUT THE GAP"))
+
+    # --- cloud engine ------------------------------------------------------
+    # Built without touching the network: a refusal must happen before any
+    # client call, so this reaches the gate and stops there.
+    from macman.engines import cloud as cloud_engine
+
+    disclosure = cloud_engine._disclose("summarise this repository")
+    honest = disclosure.precision is Precision.SCOPE
+    results.append(Check("cloud disclosure is SCOPE, not EXACT", honest,
+                         disclosure.precision.value))
+
+    mentions_followup = "looks up" in disclosure.as_text().lower()
+    results.append(Check("cloud disclosure admits tool results are sent too",
+                         mentions_followup,
+                         "stated" if mentions_followup else "UNDERSTATES WHAT LEAVES"))
+
+    # Claiming personal folders are excluded would be false: a bash tool call
+    # can read one and the result goes back to the API.
+    text = disclosure.as_text().lower()
+    overclaims = any(word in text for word in ("mail", "notes", "downloads"))
+    results.append(Check("cloud disclosure does not overclaim exclusions",
+                         not overclaims,
+                         "only code-enforced exclusions" if not overclaims
+                         else "CLAIMS FOLDERS IT CANNOT GUARANTEE"))
+
+    registry._context.set(None)
     return results
 
 
@@ -273,6 +338,7 @@ def main() -> int:
         ("Pre-approvals", pre_approval_checks()),
         ("Receipts", receipt_checks()),
         ("Bypass", bypass_checks()),
+        ("Wiring", wiring_checks()),
     ]
 
     broken: list[Check] = []

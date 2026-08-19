@@ -37,9 +37,42 @@ from pathlib import Path
 
 from macman.agent.tools.schema import tool
 
+from macman.agent.tools import registry
 from macman.agent.tools import shell as shell_tool
-from macman.agent.tools.registry import _guarded, require_confirmation
+from macman.agent.tools.registry import _guarded
 from macman.agent.tools.typed import PathRefused, _safe_folder
+from macman.security import egress
+from macman.security.audit import AuditLog
+
+
+def _disclose(task: str, folder: Path) -> egress.Disclosure:
+    """Describe a Claude Code handoff honestly.
+
+    Two things make this different from the API path, and both are worse for
+    the user, so both are stated rather than glossed:
+
+    * **MACman does not assemble the payload.** Claude Code has its own tools
+      and decides what to read. The folder is a bound, not a manifest — hence
+      `SCOPE`.
+    * **MACman's protections do not apply to it.** `DENIED_READ_PATHS`, the
+      guard and the audit log govern *MACman's* tools. A separate program
+      running under your account is not subject to them. Claiming otherwise
+      would be the most dangerous kind of reassurance: true of the wrapper,
+      false of the thing actually reading your disk.
+    """
+    return egress.Disclosure(
+        destination=egress.Destination.CLAUDE_CLI,
+        precision=egress.Precision.SCOPE,
+        reason=task,
+        payload=(
+            egress.PayloadItem(str(folder), "the whole project folder"),
+        ),
+        warning=("MACman's credential blocks do not apply to Claude Code. "
+                 "It runs as its own program with your account's access."),
+        billing="Your Claude subscription — no metered API cost",
+        path=folder,
+        category="coding",
+    )
 
 #: Claude Code can run for a long time on a real task.
 CLAUDE_TIMEOUT_SECONDS = 600
@@ -134,13 +167,21 @@ def claude_code(task: str, project: str = "") -> str:
         if not folder.is_dir():
             return f"{folder} is not a folder."
 
-        # Claude Code edits files and costs money, so this is always confirmed
-        # with both the destination and the task spelled out.
-        if not require_confirmation(
-                "hands a task to Claude Code, which will read and may edit "
-                "files in that project, and uses your Claude account",
-                f"in {folder}: {task.strip()[:160]}"):
-            return "Refused by the owner — nothing was sent to Claude."
+        # Handing work to Claude Code sends code to Anthropic, so it goes
+        # through the same gate as the API rather than a generic confirmation.
+        disclosure = _disclose(task.strip(), folder)
+        context = registry.current_context()
+        try:
+            authorisation = egress.authorise(
+                disclosure,
+                ask=context.confirm if context else None,
+                audit=context.audit if context else AuditLog(),
+                session_id=context.session_id if context else "no-session",
+                pre_approvals=egress.load_pre_approvals(),
+            )
+            egress.guard(authorisation, disclosure)
+        except egress.EgressRefused as refusal:
+            return str(refusal)
 
         result = shell_tool.run(
             f"{shlex.quote(cli)} -p {shlex.quote(task.strip())}",
