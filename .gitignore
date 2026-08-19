@@ -24,3 +24,7 @@ tests/tasks/locked.json
 # macOS
 .DS_Store
 private/
+
+# Assembled app bundle
+app/build/
+app/.build/

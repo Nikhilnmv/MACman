@@ -1,0 +1,231 @@
+// Owns the MACman daemon: starts it, talks to it, and reports what it says.
+//
+// The daemon runs as a **child of this app**, which is the entire reason the
+// app exists. macOS attributes a permission to the responsible process — the
+// app that launched the one asking. Started from Terminal, MACman's Full Disk
+// Access belongs to Terminal, and granting it there hands the same access to
+// every script the user ever runs in a shell. Started from here, it belongs to
+// MACman alone and can be revoked on its own.
+//
+// A LaunchAgent would undo that: the responsible process becomes `launchd`,
+// the permission attaches to a bare binary with no bundle, and we are back to
+// where we started. So the daemon is a child, and it dies with the app.
+
+import Foundation
+import SwiftUI
+
+/// One decoded status line from the daemon.
+struct DaemonStatus: Decodable, Equatable {
+    var running: Bool = false
+    var engine: String = "starting…"
+    var tools: Bool = false
+    var fullDiskAccess: Bool = false
+    var tasksToday: Int = 0
+    var sentOut: Int = 0
+    var detail: String = ""
+    var error: String?
+}
+
+@MainActor
+final class DaemonController: ObservableObject {
+
+    enum State: Equatable {
+        case stopped
+        case starting
+        case running
+        case failed(String)
+    }
+
+    @Published private(set) var state: State = .stopped
+    @Published private(set) var status = DaemonStatus()
+    /// Last few lines the daemon wrote to stderr. Kept because a daemon that
+    /// dies silently is the worst failure this app can have — the menu bar
+    /// would still look fine.
+    @Published private(set) var lastError: String = ""
+
+    private var process: Process?
+    private var stdinPipe: Pipe?
+    /// Partial line carried between reads: a pipe does not respect message
+    /// boundaries, so JSON arrives split at arbitrary points.
+    private var buffer = Data()
+
+    // MARK: - Lifecycle
+
+    func start() {
+        guard process == nil else { return }
+        state = .starting
+
+        guard let python = Self.pythonExecutable() else {
+            state = .failed("Could not find the MACman runtime.")
+            return
+        }
+
+        let task = Process()
+        task.executableURL = python.interpreter
+        task.arguments = ["-m", "macman.main", "bridge"]
+        task.currentDirectoryURL = python.workingDirectory
+
+        var environment = ProcessInfo.processInfo.environment
+        environment["PYTHONPATH"] = python.workingDirectory.path
+        // Unbuffered, or status lines sit in a pipe buffer and the menu bar
+        // shows stale state for as long as it takes to fill 4 KB.
+        environment["PYTHONUNBUFFERED"] = "1"
+        task.environment = environment
+
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        let inPipe = Pipe()
+        task.standardOutput = outPipe
+        task.standardError = errPipe
+        task.standardInput = inPipe
+        stdinPipe = inPipe
+
+        outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else { return }
+            Task { @MainActor in self?.absorb(chunk) }
+        }
+
+        errPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty,
+                  let text = String(data: chunk, encoding: .utf8) else { return }
+            Task { @MainActor in self?.recordError(text) }
+        }
+
+        task.terminationHandler = { [weak self] finished in
+            Task { @MainActor in self?.daemonExited(code: finished.terminationStatus) }
+        }
+
+        do {
+            try task.run()
+            process = task
+        } catch {
+            state = .failed("Could not start MACman: \(error.localizedDescription)")
+        }
+    }
+
+    /// Ask the daemon to stop, then make sure it did.
+    ///
+    /// A clean shutdown first, because the daemon may be mid-task. The kill is
+    /// a backstop: an orphaned daemon would keep running under permissions the
+    /// user can no longer see or revoke from the menu bar.
+    func stop() {
+        send(["type": "shutdown"])
+        let task = process
+        process = nil
+        stdinPipe = nil
+
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+            if task?.isRunning == true { task?.terminate() }
+        }
+        state = .stopped
+        status = DaemonStatus()
+    }
+
+    func restart() {
+        stop()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.start()
+        }
+    }
+
+    func refresh() { send(["type": "ping"]) }
+
+    /// Tell the daemon its settings changed on disk.
+    func reload() { send(["type": "reload"]) }
+
+    // MARK: - Protocol
+
+    private func send(_ message: [String: String]) {
+        guard let stdinPipe,
+              let data = try? JSONSerialization.data(withJSONObject: message)
+        else { return }
+        var line = data
+        line.append(0x0A)
+        // The daemon may already be gone; writing to a closed pipe raises
+        // SIGPIPE, which would take the whole app down with it.
+        try? stdinPipe.fileHandleForWriting.write(contentsOf: line)
+    }
+
+    private func absorb(_ chunk: Data) {
+        buffer.append(chunk)
+        while let newline = buffer.firstIndex(of: 0x0A) {
+            let line = buffer[buffer.startIndex..<newline]
+            buffer = buffer[buffer.index(after: newline)...]
+            handle(line: Data(line))
+        }
+    }
+
+    private func handle(line: Data) {
+        guard let object = try? JSONSerialization.jsonObject(with: line)
+                as? [String: Any],
+              let kind = object["type"] as? String else { return }
+
+        switch kind {
+        case "ready":
+            state = .running
+        case "status":
+            if let decoded = try? JSONDecoder().decode(DaemonStatus.self, from: line) {
+                status = decoded
+                state = decoded.running ? .running : .failed(decoded.error ?? "stopped")
+            }
+        default:
+            break
+        }
+    }
+
+    private func recordError(_ text: String) {
+        lastError = String((lastError + text).suffix(2000))
+    }
+
+    private func daemonExited(code: Int32) {
+        process = nil
+        stdinPipe = nil
+        guard state != .stopped else { return }
+        // Exiting on its own is always a fault: a healthy daemon only stops
+        // when asked, and the menu bar must say so rather than staying green.
+        state = .failed("MACman stopped unexpectedly (exit \(code)).")
+    }
+
+    // MARK: - Locating the runtime
+
+    struct Runtime {
+        let interpreter: URL
+        let workingDirectory: URL
+    }
+
+    /// Find the Python that runs the daemon.
+    ///
+    /// Two cases on purpose. A shipped bundle carries its own interpreter,
+    /// because macOS ships Python 3.9 and the daemon needs 3.11 for `tomllib`
+    /// — and depending on a Homebrew Python means the app breaks the day the
+    /// user upgrades it. During development it falls back to the repository's
+    /// virtualenv, so the app can be run without assembling a bundle first.
+    static func pythonExecutable() -> Runtime? {
+        let resources = Bundle.main.resourceURL
+
+        if let resources {
+            let embedded = resources.appendingPathComponent("python/bin/python3")
+            let payload = resources.appendingPathComponent("daemon")
+            if FileManager.default.isExecutableFile(atPath: embedded.path) {
+                return Runtime(interpreter: embedded, workingDirectory: payload)
+            }
+        }
+
+        // Development fallback: MACMAN_REPO, else the path this was built from.
+        let repo = ProcessInfo.processInfo.environment["MACMAN_REPO"]
+            .map { URL(fileURLWithPath: $0) }
+            ?? URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()   // MACman
+                .deletingLastPathComponent()   // Sources
+                .deletingLastPathComponent()   // app
+                .deletingLastPathComponent()   // repo root
+
+        let venv = repo.appendingPathComponent(".venv/bin/python3")
+        if FileManager.default.isExecutableFile(atPath: venv.path) {
+            return Runtime(interpreter: venv, workingDirectory: repo)
+        }
+        return nil
+    }
+}

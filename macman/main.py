@@ -222,12 +222,20 @@ def main() -> int:
     p_repl = sub.add_parser("repl", help="interactive session")
     p_repl.add_argument("--frontmost", default=None)
 
+    sub.add_parser("bridge", help="speak JSON over stdio to MACman.app "
+                                  "(run by the app, not by hand)")
+
     p_auth = sub.add_parser("auth", help="manage the TOTP credential")
     p_auth.add_argument("action", choices=["provision", "status", "revoke"])
     p_auth.add_argument("--force", action="store_true",
                         help="replace an existing secret (invalidates the old one)")
 
     args = parser.parse_args()
+
+    if args.command == "bridge":
+        from macman import appbridge
+
+        return appbridge.run()
 
     if args.command == "setup":
         from macman import setup

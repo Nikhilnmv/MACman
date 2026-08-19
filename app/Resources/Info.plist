@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MACman.app's Info.plist.
+
+  The usage descriptions are not boilerplate. macOS *terminates* a process that
+  touches privacy-sensitive APIs without one — SIGABRT, no prompt, no catchable
+  error. That exact failure cost real time in the speech helper, and it is
+  invisible on a Mac where the permission was already granted: it only bites on
+  a fresh install, which is every user but the author.
+
+  These strings are also what the user reads in the permission dialog, so they
+  say what MACman does with the access rather than that it would like some.
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>MACman</string>
+    <key>CFBundleDisplayName</key>
+    <string>MACman</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.nikhilnmv.macman</string>
+    <key>CFBundleExecutable</key>
+    <string>MACman</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>15.0</string>
+
+    <!-- Menu bar only: no Dock icon, no app switcher entry. -->
+    <key>LSUIElement</key>
+    <true/>
+
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>MACman transcribes what you say so you can control this Mac by voice. Speech is processed on-device and is not sent anywhere.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>MACman listens for spoken commands. Audio is processed on-device and is not recorded or uploaded.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>MACman captures call audio so it can hear what you ask during a FaceTime call. Audio is processed on-device.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>MACman controls apps like Mail, Calendar, Notes and Safari to carry out the things you ask it to do.</string>
+    <key>NSSystemAdministrationUsageDescription</key>
+    <string>MACman reads your Messages database so it can receive the texts you send it. It is read-only, and nothing is uploaded.</string>
+</dict>
+</plist>

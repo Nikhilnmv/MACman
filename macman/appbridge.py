@@ -1,0 +1,180 @@
+"""The daemon's side of the conversation with MACman.app.
+
+    macman bridge
+
+Newline-delimited JSON over stdin and stdout. Not a socket, deliberately: the
+app spawns this process and therefore already owns its pipes, so there is
+nothing to bind, nothing to authenticate, and nothing for another process on
+this Mac to connect to. The localhost design this replaced needed a token, an
+origin check and a rebinding defence to reach the same place.
+
+## Why the app must be the parent
+
+macOS attributes a permission to the **responsible process** — the app that
+launched the one asking. Run from Terminal, MACman's permissions belong to
+Terminal, which means granting Full Disk Access to *every script the user will
+ever run there*. Launched by `MACman.app`, they belong to MACman alone, and the
+user can revoke them without crippling their shell.
+
+That is the whole reason this file exists. It is also why the daemon must stay
+a child: started by `launchd` instead, the responsible process becomes
+`launchd`, permissions attach to a bare binary with no bundle, and the benefit
+is gone.
+
+## Protocol
+
+Both directions are one JSON object per line, flushed immediately.
+
+    app → bridge    {"type": "ping"}          request an immediate status
+                    {"type": "reload"}        settings changed on disk
+                    {"type": "shutdown"}      exit cleanly
+
+    bridge → app    {"type": "status", …}     periodic, and after every command
+                    {"type": "ready", …}      once, at startup
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import select
+import sys
+import time
+from dataclasses import asdict, dataclass
+from typing import Any
+
+from macman import config
+
+#: How often status is pushed without being asked. Short enough that the menu
+#: bar is not stale, long enough to stay invisible in Activity Monitor.
+STATUS_INTERVAL_SECONDS = 5.0
+
+
+@dataclass
+class Status:
+    """What the menu bar needs to draw itself.
+
+    `sentOut` is here because it is the headline claim, and a number that is
+    almost always zero is far more convincing in the menu bar than a sentence
+    about privacy in a settings pane.
+    """
+
+    running: bool = True
+    engine: str = "unknown"
+    #: False means the on-device model cannot call tools — see RELIABILITY.md.
+    tools: bool = False
+    fullDiskAccess: bool = False
+    tasksToday: int = 0
+    sentOut: int = 0
+    detail: str = ""
+    error: str | None = None
+
+
+def _today_counts() -> tuple[int, int]:
+    """(tasks, cloud sends) since local midnight, read from the audit log.
+
+    Read rather than kept in memory so the count survives a restart and cannot
+    disagree with the log the user can inspect. A malformed line is skipped:
+    the status line must never be the thing that crashes the daemon.
+    """
+    log = config.AUDIT_LOG
+    if not log.exists():
+        return 0, 0
+
+    midnight = time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1))
+    tasks = sent = 0
+    try:
+        with log.open("r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if float(record.get("ts", 0)) < midnight:
+                    continue
+                event = record.get("event", "")
+                if event == "task_start":
+                    tasks += 1
+                elif event in {"egress_approved", "egress_pre_approved"}:
+                    sent += 1
+    except OSError:
+        return 0, 0
+    return tasks, sent
+
+
+def read_status() -> Status:
+    """Assemble the current state. Never raises — a status line that throws
+    would take the daemon down with it."""
+    status = Status()
+    try:
+        from macman.engines import local as local_engine
+        from macman.preflight import _probe_full_disk_access
+
+        backend = local_engine.apple_backend()
+        status.engine = "on-device" if backend.available else "unavailable"
+        status.tools = backend.tools
+        status.detail = backend.detail
+        status.fullDiskAccess = _probe_full_disk_access()
+        status.tasksToday, status.sentOut = _today_counts()
+
+        # A model that cannot call tools answers from memory instead of
+        # looking things up. That is a broken install, not a degraded one, so
+        # it is surfaced rather than hidden behind a green dot.
+        if backend.available and not backend.tools:
+            status.error = ("The on-device model cannot use tools. Rebuild the "
+                            "helpers with -DMACMAN_TOOLS.")
+    except Exception as exc:                     # noqa: BLE001 — see docstring
+        status.running = False
+        status.error = f"{type(exc).__name__}: {exc}"[:200]
+    return status
+
+
+def _emit(payload: dict[str, Any]) -> None:
+    sys.stdout.write(json.dumps(payload, sort_keys=True) + "\n")
+    sys.stdout.flush()
+
+
+def _send_status() -> None:
+    _emit({"type": "status", **asdict(read_status())})
+
+
+def run() -> int:
+    """Serve the app until it closes the pipe or asks us to stop.
+
+    EOF on stdin means the app quit. Exiting then is correct and deliberate:
+    the app owns the permissions this process runs under, so a daemon that
+    outlived it would be an orphan holding access nobody can see or revoke
+    from the menu bar.
+    """
+    _emit({"type": "ready", "pid": os.getpid()})
+    _send_status()
+
+    next_status = time.monotonic() + STATUS_INTERVAL_SECONDS
+
+    while True:
+        timeout = max(0.0, next_status - time.monotonic())
+        readable, _, _ = select.select([sys.stdin], [], [], timeout)
+
+        if readable:
+            line = sys.stdin.readline()
+            if not line:                       # EOF — the app is gone
+                return 0
+            try:
+                message = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            kind = message.get("type")
+            if kind == "shutdown":
+                return 0
+            if kind == "reload":
+                # Settings are read fresh at each use, so there is nothing to
+                # invalidate — acknowledging keeps the app's state honest.
+                _emit({"type": "reloaded"})
+                _send_status()
+            elif kind == "ping":
+                _send_status()
+
+        if time.monotonic() >= next_status:
+            _send_status()
+            next_status = time.monotonic() + STATUS_INTERVAL_SECONDS
