@@ -22,7 +22,6 @@ Claude keeps raw `bash` — it writes correct commands and needs the generality.
 
 from __future__ import annotations
 
-import os
 import shlex
 from pathlib import Path
 
@@ -31,6 +30,7 @@ from macman.agent.tools.schema import tool
 from macman import config
 from macman.agent.tools import shell as shell_tool
 from macman.agent.tools.applescript import run as run_applescript
+from macman.security.paths import within as path_within
 # Same gate the cloud engine's tools use: tier check, guard verdict, audit.
 from macman.agent.tools.registry import _guarded
 
@@ -41,41 +41,11 @@ class PathRefused(ValueError):
     """Raised when an argument names a path the tools must not read."""
 
 
-def _within(candidate: Path, protected: Path) -> bool:
-    """Whether `candidate` is, or is inside, `protected`.
-
-    Three checks, because any one alone has been shown to be bypassable:
-
-    1. **Resolved prefix** — catches `..` traversal and symlinks, since
-       `resolve()` follows both.
-    2. **Case-folded prefix** — macOS filesystems are case-insensitive by
-       default, so `~/.SSH/id_ed25519` opens the same file as `~/.ssh/…`.
-       A purely case-sensitive comparison let that through, and an audit
-       confirmed it leaked real key material.
-    3. **Identity** — where both paths exist, compare inode rather than
-       spelling, which also catches hard links and firmlinks.
-    """
-    try:
-        if candidate == protected or candidate.is_relative_to(protected):
-            return True
-    except ValueError:
-        pass
-
-    folded = str(candidate).casefold()
-    protected_folded = str(protected).casefold()
-    if folded == protected_folded or folded.startswith(protected_folded + os.sep):
-        return True
-
-    # Walk upward: the file itself may not exist, but a parent will.
-    for parent in [candidate, *candidate.parents]:
-        try:
-            if parent.exists() and protected.exists() and parent.samefile(protected):
-                return True
-        except OSError:
-            continue
-        if parent == parent.parent:      # reached the root
-            break
-    return False
+#: Whether a resolved path falls inside a protected one. Lives in
+#: `security/paths` because `security/egress` needs the identical check to
+#: match cloud pre-approvals, and two copies of a rule this subtle would drift.
+#: Kept as a module-level name here because the audit suite imports it.
+_within = path_within
 
 
 def _safe_folder(raw: str) -> Path:
