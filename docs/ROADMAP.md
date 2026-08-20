@@ -191,8 +191,8 @@ everything."
 |---|---|---|---|
 | 🤖 | 0 | Merge the two roadmaps into this document | ✅ |
 | 🤖 | 1 | **Wire the poller into the bridge** — the blocker | ⬜ |
-| 🤖 | 2 | Make revoke actually revoke, and work without the repo | ⬜ |
-| 🤖 | 3 | Rewrite TESTING.md and VERIFY.md as real-user guides, including removal | ⬜ |
+| 🤖 | 2 | Make revoke actually revoke, and work without the repo | ✅ |
+| 🤖 | 3 | Rewrite TESTING.md and VERIFY.md as real-user guides, including removal | ⬜ next |
 | 🤖 | 4 | Permissions cleanup guide — Claude.app, Terminal, MACman.app | ⬜ |
 | 👤 | 5 | Fresh install in a second macOS account | ⬜ |
 | 🤖 | 6 | Homebrew cask, version single-sourced, first release | ⬜ |

@@ -285,6 +285,12 @@ def _handle_settings(kind: str, message: dict[str, Any]) -> None:
         elif kind == "remove_pre_approval":
             appsettings.remove_pre_approval(int(message.get("index", -1)))
             detail = "Pre-approval removed"
+        elif kind == "revoke_credentials":
+            detail = appsettings.revoke_credentials()
+            if _poller is not None:
+                # Without a login code nothing can authenticate, so continuing
+                # to poll would only queue messages it must refuse.
+                _poller.stop()
         elif kind == "open_permission":
             permissions.open_settings(str(message.get("key", "")))
             detail = "Opened System Settings"
@@ -434,7 +440,7 @@ def run() -> int:
                 threading.Thread(target=_run_self_test, daemon=True).start()
             elif kind in {"settings_set", "set_cloud_key", "clear_cloud_key",
                           "add_pre_approval", "remove_pre_approval",
-                          "open_permission"}:
+                          "open_permission", "revoke_credentials"}:
                 _handle_settings(kind, message)
             elif kind == "consent_selftest":
                 # Exercises the whole consent path — daemon to dialog and back

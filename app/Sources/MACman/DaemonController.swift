@@ -217,6 +217,8 @@ final class DaemonController: ObservableObject {
 
     func clearCloudKey() { send(["type": "clear_cloud_key"]) }
 
+    func revokeCredentials() { send(["type": "revoke_credentials"]) }
+
     func removePreApproval(_ index: Int) {
         send(["type": "remove_pre_approval", "index": index])
     }

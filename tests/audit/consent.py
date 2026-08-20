@@ -220,6 +220,39 @@ def secret_checks() -> list[Check]:
     results.append(Check("settings never return a provisioning URI",
                          "otpauth" not in flat, "absent"))
 
+    # Every credential the code stores must be reachable by both removal
+    # paths. This check exists because it was not: the Claude key was added
+    # when settings moved it into the Keychain, and "revoke everything" kept
+    # deleting only the TOTP secret for weeks. Someone who ran it believing
+    # they had turned MACman off would have left a working, billable
+    # credential behind.
+    #
+    # Structural rather than a list, so the next credential someone adds fails
+    # this check instead of being quietly forgotten.
+    import re
+
+    root = Path(macman_config.__file__).resolve().parents[1]
+    services = set()
+    for source in (root / "macman").rglob("*.py"):
+        for match in re.finditer(r'"(com\.macman\.[a-z]+)"', source.read_text()):
+            services.add(match.group(1))
+
+    for script, label in ((root / "scripts/revoke_all.py", "revoke_all.py"),
+                          (root / "scripts/uninstall.sh", "uninstall.sh")):
+        text = script.read_text() if script.exists() else ""
+        # revoke_all reaches the services through appsettings/config constants,
+        # so accept either the literal or the constant that resolves to it.
+        missing = [
+            service for service in services
+            if service not in text
+            and not (service == "com.macman.totp" and "KEYCHAIN_SERVICE" in text)
+            and not (service == "com.macman.cloud" and "clear_cloud_key" in text)
+        ]
+        results.append(Check(
+            f"{label} covers every stored credential",
+            not missing,
+            f"{len(services)} known" if not missing else f"MISSES {missing}"))
+
     # Only known fields may be written, so a hostile or buggy app cannot
     # inject arbitrary keys into the config file.
     try:

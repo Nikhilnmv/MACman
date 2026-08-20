@@ -63,6 +63,7 @@ struct SettingsWindow: View {
         case access = "Who can reach me"
         case engine = "Engine"
         case activity = "Activity"
+        case advanced = "Advanced"
         var id: String { rawValue }
     }
 
@@ -80,6 +81,9 @@ struct SettingsWindow: View {
             ActivityTab(daemon: daemon)
                 .tabItem { Text(Tab.activity.rawValue) }
                 .tag(Tab.activity)
+            AdvancedTab(daemon: daemon)
+                .tabItem { Text(Tab.advanced.rawValue) }
+                .tag(Tab.advanced)
         }
         .frame(width: 540, height: 460)
         .onAppear { daemon.loadSettings() }
@@ -291,6 +295,111 @@ struct EngineTab: View {
                             Button("Revoke") { daemon.removePreApproval(index) }
                                 .controlSize(.small)
                         }
+                    }
+                }
+            }
+            .padding(18)
+        }
+    }
+}
+
+// MARK: - Advanced
+
+/// Where MACman explains how to get rid of it.
+///
+/// Placed in plain sight rather than buried, because a tool asking for Full
+/// Disk Access should be at least as clear about leaving as about arriving.
+///
+/// The app does what it can do safely and completely — revoking credentials —
+/// and hands off the rest. It deliberately does not delete itself or your
+/// audit log from a single button: an app removing itself while running is
+/// fragile, and erasing the record of what it did is not a side effect anyone
+/// should get by accident.
+struct AdvancedTab: View {
+    @ObservedObject var daemon: DaemonController
+    @State private var confirmingRevoke = false
+
+    private let uninstallCommand =
+        "curl -fsSL https://raw.githubusercontent.com/Nikhilnmv/MACman/main/scripts/uninstall.sh | bash -s -- --yes"
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Turn off access").font(.headline)
+                Text("Deletes your login code and any Claude key from the "
+                     + "Keychain, and stops listening. MACman stays installed "
+                     + "but can no longer authenticate anyone.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if confirmingRevoke {
+                    HStack {
+                        Text("This cannot be undone — you would set up a new "
+                             + "login code afterwards.")
+                            .font(.caption).foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button("Cancel") { confirmingRevoke = false }
+                        Button("Delete credentials") {
+                            daemon.revokeCredentials()
+                            confirmingRevoke = false
+                        }
+                    }
+                } else {
+                    Button("Turn off access…") { confirmingRevoke = true }
+                }
+
+                Divider().padding(.vertical, 4)
+
+                Text("Remove MACman completely").font(.headline)
+                Text("Removes the app, your settings, the audit log, staged "
+                     + "screenshots and both Keychain entries. Run it in "
+                     + "Terminal — it needs nothing but macOS, so it still "
+                     + "works after the app is gone.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    Text(uninstallCommand)
+                        .font(.system(size: 10, design: .monospaced))
+                        .textSelection(.enabled)
+                        .lineLimit(2)
+                        .padding(6)
+                        .background(.quaternary.opacity(0.4),
+                                    in: RoundedRectangle(cornerRadius: 4))
+                    Button("Copy") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(uninstallCommand,
+                                                       forType: .string)
+                    }
+                    .controlSize(.small)
+                }
+                Text("Run it without --yes first to see exactly what it would "
+                     + "remove, changing nothing.")
+                    .font(.caption2).foregroundStyle(.secondary)
+
+                Divider().padding(.vertical, 4)
+
+                Text("macOS permissions").font(.headline)
+                Text("Only you can revoke these, in System Settings. No app "
+                     + "should be able to switch off its own oversight.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Open Privacy & Security") {
+                    daemon.openPermission("full_disk")
+                }
+                .controlSize(.small)
+
+                Divider().padding(.vertical, 4)
+
+                Text("Files").font(.headline)
+                ForEach([("Settings", daemon.settings.config_path),
+                         ("Activity log", daemon.settings.audit_path)], id: \.0) { row in
+                    if !row.1.isEmpty {
+                        Text("\(row.0): \(row.1)")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
                     }
                 }
             }

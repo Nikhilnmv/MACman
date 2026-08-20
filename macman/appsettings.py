@@ -22,6 +22,7 @@ The app asks; this validates, writes, and says what happened.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -247,6 +248,38 @@ def add_pre_approval(category: str, path: str, days: int) -> str:
     })
     userconfig.update(cloud_preapprovals=existing)
     return f"{category} tasks under {folder} for {span} day(s)"
+
+
+def revoke_credentials() -> str:
+    """Delete every stored credential, leaving the install in place.
+
+    The in-app half of `scripts/uninstall.sh`. It stops short of removing the
+    app or its data on purpose: an app deleting itself while running is fragile,
+    and quietly erasing someone's audit log — the record of what MACman did —
+    is not something a single button should do.
+
+    What it *can* do completely is revoke access, which is the part that
+    matters if you have stopped trusting it.
+    """
+    import keyring
+
+    removed = []
+    if auth.is_configured():
+        auth.revoke()
+        removed.append("login code")
+    if keyring.get_password(CLOUD_KEYCHAIN_SERVICE, _CLOUD_ACCOUNT) is not None:
+        clear_cloud_key()
+        removed.append("Claude key")
+
+    if not removed:
+        return "No credentials were stored."
+
+    note = " and ".join(removed)
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return (f"Deleted the {note}. ANTHROPIC_API_KEY is still set in the "
+                "environment, which no app can unset — remove it from your "
+                "shell profile or .env.")
+    return f"Deleted the {note}. MACman can no longer authenticate anyone."
 
 
 def remove_pre_approval(index: int) -> None:

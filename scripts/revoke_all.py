@@ -1,15 +1,26 @@
 #!/usr/bin/env python3
-"""Revoke everything MACman has, in one command.
+"""Cut off MACman's access, without uninstalling it.
 
     .venv/bin/python scripts/revoke_all.py            # report what exists
     .venv/bin/python scripts/revoke_all.py --revoke   # actually revoke
     .venv/bin/python scripts/revoke_all.py --revoke --purge-audit
 
+**For complete removal use `scripts/uninstall.sh` instead.** That one needs
+nothing but macOS — no repository, no virtualenv — which matters because the
+people most likely to want MACman gone are the ones who installed a release
+and never had a checkout. This script is the softer action: revoke the
+credentials and stop the process, leave the install in place.
+
 What this does, in order:
 
 1. Kills any running MACman process.
-2. Unloads and removes the LaunchAgent, so nothing restarts at login.
-3. Deletes the TOTP secret from the Keychain — every issued code dies with it.
+2. Removes a LaunchAgent if an old version left one. Current versions do not
+   install one — MACman.app runs the daemon as its child, which is what keeps
+   the permissions attached to MACman rather than to Terminal.
+3. Deletes **both** credentials from the Keychain: the TOTP secret, and the
+   Claude API key. Every issued code dies with the first, and the second is
+   what would otherwise let a cloud request succeed after you thought you had
+   turned everything off.
 4. Reports which macOS permissions are still granted, with the exact pane for
    each, because **only you can revoke those** and no program should be able to.
 
@@ -23,6 +34,7 @@ this machine — there is no account to close and no service to cancel.
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -77,6 +89,52 @@ def revoke_totp(revoke: bool) -> None:
     _say(True, "TOTP secret deleted — all issued codes are now invalid")
 
 
+def revoke_cloud_key(revoke: bool) -> None:
+    """Delete the Claude API key.
+
+    Missing from this script until an audit of the uninstall path caught it:
+    the key was added when settings moved it into the Keychain, and
+    "revoke everything" kept deleting only the TOTP secret. Someone who ran
+    this believing they had turned MACman off would have left a working,
+    billable credential behind.
+    """
+    import keyring
+
+    from macman import appsettings
+
+    # Reported separately, because `cloud_key()` also falls back to
+    # ANTHROPIC_API_KEY and saying "present in Keychain" when it is really in a
+    # dotfile sends someone looking in the wrong place — and leaves them
+    # believing a key was deleted that this script cannot reach.
+    in_keychain = keyring.get_password(
+        appsettings.CLOUD_KEYCHAIN_SERVICE, "anthropic-api-key") is not None
+    in_environment = os.environ.get("ANTHROPIC_API_KEY") is not None
+
+    if not in_keychain and not in_environment:
+        _say(True, "no Claude API key stored")
+        return
+    if not revoke:
+        if in_keychain:
+            _say(False, "Claude API key present in Keychain "
+                        f"({appsettings.CLOUD_KEYCHAIN_SERVICE})")
+        if in_environment:
+            _say(False, "ANTHROPIC_API_KEY is set in the environment — this "
+                        "script cannot unset it; remove it from your shell "
+                        "profile or .env")
+        return
+
+    if in_keychain:
+        appsettings.clear_cloud_key()
+    if in_environment:
+        # Still resolvable means it is coming from ANTHROPIC_API_KEY in the
+        # environment, which this script cannot reach into and unset.
+        _say(True, "Keychain entry cleared, but ANTHROPIC_API_KEY is still set "
+                   "in your environment — remove it from your shell profile "
+                   "or .env, or the cloud engine will still work")
+    else:
+        _say(True, "Claude API key deleted")
+
+
 def purge_audit(purge: bool) -> None:
     if not config.AUDIT_LOG.exists():
         _say(True, "no audit log")
@@ -123,6 +181,7 @@ def main() -> int:
     kill_processes(args.revoke)
     remove_launch_agent(args.revoke)
     revoke_totp(args.revoke)
+    revoke_cloud_key(args.revoke)
     purge_audit(args.revoke and args.purge_audit)
     report_permissions()
 
