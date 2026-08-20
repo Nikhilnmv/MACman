@@ -280,20 +280,53 @@ pip install --require-hashes -r requirements.lock
 
 ## Turn it all off
 
-One command kills the process, removes the LaunchAgent so nothing restarts at
-login, and deletes the TOTP secret from the Keychain — every issued code dies
-with it:
+### Remove everything
+
+```bash
+./scripts/uninstall.sh          # shows what it would remove, changes nothing
+./scripts/uninstall.sh --yes    # actually removes it
+```
+
+Deletes **both** Keychain entries — your login code and any Claude key — plus
+`~/Library/Application Support/MACman` (settings, activity log, session state),
+`~/Pictures/MACMan` (screenshots MACman attached to replies), and the app.
+`--keep-log` copies the activity log to your Desktop first.
+
+Credentials go first, deliberately: if the rest failed halfway, the credentials
+being gone is what actually matters.
+
+**It needs nothing but macOS** — no repository, no virtualenv — so it still
+works after you have deleted everything else. That is the point: the people
+most likely to want MACman gone are the ones who never had a checkout.
+
+### Or just revoke access, keeping the install
 
 ```bash
 .venv/bin/python scripts/revoke_all.py --revoke
 ```
 
-Run it without `--revoke` first to see what exists. Add `--purge-audit` to
-delete the log as well.
+Deletes both credentials and stops the process, leaving MACman installed. Run
+without `--revoke` to see what exists; `--purge-audit` deletes the log too.
 
-macOS permissions are revoked separately, and independently of this project, in
-**System Settings → Privacy & Security**. Removing Full Disk Access there stops
-the text channel working no matter what MACman's code does.
+Menu bar → **Settings → Advanced → Turn off access…** does the same thing
+without a terminal.
+
+> **A correction worth recording:** until recently this script deleted only the
+> TOTP secret, so the Claude API key survived "revoke everything". Anyone who
+> ran it believing they had switched MACman off would have left a working,
+> billable credential behind. An audit now asserts every stored credential is
+> reachable by both removal paths.
+
+### The part only you can do
+
+macOS permissions are revoked separately, in **System Settings → Privacy &
+Security**. Nothing here tries to do it for you — a program able to switch off
+its own oversight would be exactly the wrong design.
+
+Removing Full Disk Access there stops the text channel working no matter what
+MACman's code does. And if you granted it to **Terminal** while running MACman
+from a checkout, consider revoking that too: it covers every script you will
+ever run in a shell, not just this one.
 
 ---
 

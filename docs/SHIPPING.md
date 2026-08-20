@@ -1,15 +1,26 @@
 # Shipping MACman to real people
 
-The plan for turning a working personal tool into something a stranger can
-trust with Full Disk Access.
+> **The sequence in this document is superseded by
+> [ROADMAP.md](ROADMAP.md#checkpoint-3--release-candidate), which is now the
+> single plan.** What is kept here is the reasoning — why the trust problem is
+> the hard part — because that argument has not changed and is worth reading
+> before writing anything user-facing.
+
+The reasoning behind turning a working personal tool into something a stranger
+can trust with Full Disk Access.
 
 ---
 
 ## The problem to solve first
 
 Installing MACman means granting **Accessibility, Full Disk Access, Screen
-Recording, Microphone, Speech and Automation** to 7,440 lines of code and 32
-Python packages from an unknown GitHub account.
+Recording, Microphone, Speech and Automation** to roughly 11,700 lines of code
+and 11 Python packages from an unknown GitHub account.
+
+*(Those numbers were "7,440 lines and 32 packages" when this was written. The
+dependency count fell because the Claude SDK became optional; the line count
+grew because the app was built. Both are measured, not estimated — see
+`requirements.lock`.)*
 
 That is a larger trust ask than almost anything else a person installs. Every
 decision below exists to answer it. **Convenience that costs trust is the wrong

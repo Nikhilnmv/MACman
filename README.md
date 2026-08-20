@@ -70,9 +70,10 @@ Full list with the phrasings that work: **[COMMANDS.md](docs/COMMANDS.md)**
 - Optional: an [Anthropic API key](https://console.anthropic.com) and
   `pip install '.[cloud]'` for the Claude tier
 
-A one-line `brew install` is planned — see
-[packaging/README.md](packaging/README.md). It needs the repo to be public,
-since Homebrew fetches a public tarball.
+A one-line `brew install` is planned but **not published yet** — there are no
+tagged releases and no cask, so there is currently no way to receive updates
+other than `git pull` and rebuild. See
+[ROADMAP.md](docs/ROADMAP.md#checkpoint-3--release-candidate).
 
 ---
 
@@ -83,18 +84,27 @@ git clone git@github.com:Nikhilnmv/MACman.git
 cd MACman
 python3 -m venv .venv && .venv/bin/pip install -e .   # 11 packages, no cloud SDK
 cd helpers && swift build -c release -Xswiftc -DMACMAN_TOOLS && cd ..
-.venv/bin/python -m macman.main setup
+cd app && ./build.sh --embed && cd ..
+open app/build/MACman.app
 ```
 
-`setup` walks the permissions, your allowlist, and your login code, then
-self-tests. Then:
+A 🖥 icon appears in your menu bar. Click it → **Set up MACman…** and the
+wizard walks the permissions, your allowlist and your login code, then runs a
+real task and shows the outbound connection count.
 
-```bash
-.venv/bin/python -m macman.main serve
-```
+**Grant Full Disk Access to MACman.app, not to Terminal.** Both would work, but
+granting it to Terminal hands the same access to every script you will ever run
+in a shell. The app appears by name in System Settings and can be revoked on
+its own.
 
-Text your Apple ID from your phone. **Step-by-step with expected output at
+Then text your Apple ID from your phone. **Step by step, with what to expect at
 every stage: [TESTING.md](docs/TESTING.md)**
+
+There is no release build or Homebrew cask yet, so this is a source install.
+
+Prefer the terminal? `macman setup` and `macman serve` still work and are
+useful for debugging — but a terminal-launched daemon is why the permission
+lands on Terminal, so the app is the better default.
 
 Or talk to it directly, no phone needed:
 
@@ -130,7 +140,11 @@ boundaries are worth stating plainly.
   grants and runs the daemon as its child, so Full Disk Access covers MACman
   alone — not every script you will ever run in a shell.
 - **Every tool call is logged** to an append-only audit file.
-- **One command turns everything off**: `scripts/revoke_all.py --revoke`
+- **Removing it is one command, and it needs nothing but macOS**:
+  `./scripts/uninstall.sh` (dry run) then `--yes`. It takes both Keychain
+  entries, your settings, the activity log and the staged screenshots.
+  macOS permissions stay yours to revoke — no app should be able to switch
+  off its own oversight.
 
 These are attacked rather than asserted — **23 attack vectors resisted**
 (`tests/audit/injection.py`) and **21 egress checks held**
@@ -170,12 +184,14 @@ used. A wrong click isn't a wrong answer — it presses something.
 | | |
 |---|---|
 | [SECURITY.md](docs/SECURITY.md) | Threat model, and what it does **not** protect against |
-| [TESTING.md](docs/TESTING.md) | Set up and verify everything, step by step |
+| [TESTING.md](docs/TESTING.md) | Install it, use it, and **remove it completely** |
+| [VERIFY.md](docs/VERIFY.md) | Test every capability from your phone, with expected answers |
 | [COMMANDS.md](docs/COMMANDS.md) | Everything it can do, and how to ask |
 | [RELIABILITY.md](docs/RELIABILITY.md) | Every measurement, with the method |
 | [CAPABILITY.md](docs/CAPABILITY.md) | Architecture, and the free/paid boundary |
 | [DESIGN.md](docs/DESIGN.md) | Why it's built this way |
-| [ROADMAP.md](docs/ROADMAP.md) | What's done, what's next |
+| [ROADMAP.md](docs/ROADMAP.md) | The single plan — what's done, what's next |
+| [SHIPPING.md](docs/SHIPPING.md) | Why earning trust is the hard part of shipping this |
 
 ---
 

@@ -5,12 +5,22 @@ level, with the exact words to send and what a correct answer looks like.
 
 **Before you start**
 
-```bash
-cd ~/Documents/MACMan && .venv/bin/python -m macman.main serve
+Open MACman.app and click the menu bar icon. It must say:
+
+```
+Listening for texts — on-device
 ```
 
-Leave that running. Everything below is sent from your **other Apple device**
-to your **own Apple ID**.
+If it says **Not listening**, the line underneath names the reason — usually
+Full Disk Access, or an empty allowlist. Fix that first; nothing below will
+work otherwise. Setup instructions are in [TESTING.md](TESTING.md).
+
+Everything below is sent from your **other Apple device** to your **own Apple
+ID**.
+
+> Running `macman serve` in a terminal also works and is useful for debugging,
+> but prefer the app: a terminal-launched daemon makes macOS attribute Full
+> Disk Access to Terminal, which covers every script you ever run there.
 
 Then open the session:
 
@@ -145,6 +155,27 @@ Every tool call you just made should be there, with which engine ran it.
 
 ---
 
+## The app itself
+
+Not sent from your phone — these are the surfaces that tell you what MACman is
+doing, and they are worth exercising once.
+
+| Where | Check |
+|---|---|
+| Menu bar | Says **Listening for texts**, and the counts move after a task |
+| Menu bar → *Show me a consent request…* | A dialog appears; **"Don't send" is the default button** and Return refuses |
+| Settings → Permissions | Live dots match what System Settings shows |
+| Settings → Who can reach me | Add a deliberately malformed handle like `nonsense` — it must be **rejected with a readable reason**, not silently accepted |
+| Settings → Engine | Reports whether a Claude key exists, and **never shows the key itself** |
+| Settings → Activity | Every task you just ran, each marked *Nothing left this Mac* |
+| Settings → Activity | The **sent out today** count is `0` unless you used Claude |
+
+**If you have a Claude key configured**, send `ask Claude to explain this
+project, in my MACMan project` and watch for the consent dialog. It must show
+what would be sent *before* sending, and refusing must send nothing.
+
+---
+
 ## Voice — no phone needed
 
 ```bash
@@ -176,3 +207,28 @@ probably more.
 Also worth noting: anything where you had to phrase it twice. That's a
 tool-selection gap, and it's measurable — see
 [RELIABILITY.md](RELIABILITY.md).
+
+---
+
+## When you are done testing
+
+**Pause it:** menu bar → *Stop listening*.
+
+**Revoke access, keep the install:** Settings → Advanced → *Turn off access…*
+Deletes your login code and any Claude key.
+
+**Remove everything:**
+
+```bash
+./scripts/uninstall.sh          # shows what it would remove, changes nothing
+./scripts/uninstall.sh --yes    # actually removes it
+```
+
+That includes `~/Pictures/MACMan`, where screenshots sent as attachments are
+staged — the most personal thing MACman leaves behind, and not somewhere anyone
+would think to look.
+
+macOS permissions are yours to revoke, in System Settings → Privacy & Security.
+No program should be able to switch off its own oversight, so the script lists
+them rather than touching them. Full details in
+[TESTING.md](TESTING.md#turning-it-off-and-removing-it-completely).
