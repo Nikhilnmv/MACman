@@ -1,11 +1,13 @@
 # MACman — Roadmap
 
+The single plan. Merged from the old `ROADMAP.md` and the private
+`EXPERIENCE_PLAN.md`, because two documents describing the same project drifted
+apart and one of them was gitignored where nobody would check it.
+
 **Goal:** an open-source tool that privacy-minded Mac users actually run every
 day. Not a company, not a demo — something real people install and keep.
 
-**Two experiences matter equally:** texting your Mac from anywhere, and
-FaceTiming it. Local voice is a bonus that happens to be useful when you're
-sitting at the machine.
+**Audience:** developers and technical Mac users.
 
 **Legend:** 🤖 I build · 👤 you do · ✅ done · ⏸ blocked · ⬜ not started
 
@@ -14,40 +16,43 @@ sitting at the machine.
 ## Where we are
 
 ```
-Foundation + text channel   ████████████████████  done, verified live
+Foundation + text channel   ████████████████████  done, verified live (Aug)
 Capabilities (18 tools)     ████████████████████  done, 99% selection
-Security, attacked          ████████████████████  23/23 + 21/21 egress
-Consent before anything     ████████████████████  one exit, wired, dialog + 17/17
-MACman.app                  ████████████████████  menu bar, settings, activity, setup
+Security, attacked          ████████████████████  84 audit checks, all held
+Consent before anything     ████████████████████  one exit, dialog + text
+MACman.app                  ████████████████░░░░  built; not yet wired to the poller
+Actually usable end-to-end  ████████░░░░░░░░░░░░  the app does not answer texts yet
 Local voice                 ████████████████░░░░  works; unverified by you
 FaceTime calling            ██████████░░░░░░░░░░  audio + auth proven; driver needs a call
-Ready for strangers         ██████████░░░░░░░░░░  setup UI done; not packaged or signed
+Distribution & updates      ░░░░░░░░░░░░░░░░░░░░  nothing: no tags, no cask, no update path
 ```
-
-**What exists:** a working tool *you* can use. Text your Mac, it authenticates,
-does the thing, texts back. 18 capabilities, free, private, measured.
-
-**What doesn't:** anything a stranger could install, and any evidence it's
-safe to hand to one.
 
 ---
 
 ## The honest picture
 
-Three things are true at once, and the roadmap only makes sense if all three
-are held:
+Four things are true at once, and the plan only makes sense if all four are
+held.
 
-**It works.** 99% tool selection over 105 trials, 100% answer correctness where
-checked against ground truth, zero network calls during private tasks.
+**The engine works.** 99% tool selection over 105 trials, 100% answer
+correctness where checked against ground truth, zero network calls during
+private tasks.
 
-**It's unproven.** Every one of those numbers came from one developer testing
-on one Mac. Nobody has used it for a week. Nobody has attacked it. Nobody has
-installed it from scratch.
+**The security core is real.** One exit for data, consent before anything
+leaves, 84 audit checks across four suites. Two genuine vulnerabilities were
+found by attacking it — a case-insensitive credential leak, and a consent path
+where every refusal would have been recorded as an approval.
 
-**Its ceiling is real.** The free tier runs a ~3B on-device model that cannot
-see images, cannot write shell commands, and cannot operate apps offering no
-automation. It does what we build primitives for. That is the shape of the
-product, not a defect to fix.
+**The product is not connected to itself.** `MACman.app` runs the bridge —
+status, settings, activity, consent, setup — and **never starts the iMessage
+poller**. That lives in `macman serve`, which the app has no path to. So the
+menu bar says "Running" when nothing is listening, and actually using MACman
+still means a Terminal command, which puts the permission back on Terminal and
+undoes the reason the app was built. **Fixing this is checkpoint 3, step 1.**
+
+**Nobody has used it.** 908 tasks in the audit log, all `cli/unspecified`. Zero
+on the iMessage channel since 16 August, before the app existed. Every number
+in `RELIABILITY.md` came from one developer on one Mac.
 
 The defensible position — and the only one worth building for — is this:
 **nothing else routes your personal documents to an on-device model and proves
@@ -56,195 +61,259 @@ That gap is the whole product.
 
 ---
 
-## Phase 1 — Trust it *(now)*
+## Checkpoint 1 — Trust it ✅
 
-Nothing else matters until MACman is provably safe and you personally believe
-it works. **Promoting a tool that holds Full Disk Access and has never been
-attacked is the one mistake that could genuinely hurt someone.**
+### 1a. Daily use *(still open, and still yours)*
 
-### 1a. You use it, daily, for a week
+| | Task | State |
+|---|---|---|
+| 👤 | Run [VERIFY.md](VERIFY.md) end to end from your phone | ⬜ |
+| 👤 | Use it daily for a week — real tasks, not test ones | ⬜ |
+| 🤖 | Fix what surfaces | ⬜ |
 
-| | Task |
-|---|---|
-| 👤 | Run [VERIFY.md](VERIFY.md) end to end from your phone |
-| 👤 | Use it daily for a week — real tasks, not test ones |
-| 👤 | Keep a note of every wrong answer, awkward phrasing and confusion |
-| 🤖 | Fix what surfaces |
-
-**Why first:** you're the only person who can tell me whether this is *useful*,
-as opposed to *correct*. The benchmark measures whether it picks the right
-tool, not whether anyone wants the result.
+**Why it matters:** you are the only person who can say whether this is
+*useful*, as opposed to *correct*. The benchmark measures whether it picks the
+right tool, not whether anyone wanted the result.
 
 ### 1b. Adversarial security testing ✅
 
-The defences were asserted, not attacked. Now they're attacked.
-
 | | Task |
 |---|---|
-| ✅ | **Prompt injection suite** — hostile text in file content and filenames: fake system turns, forged authority, urgency, tool-shaped payloads |
+| ✅ | Prompt injection: hostile text in file content and filenames — fake system turns, forged authority, urgency, tool-shaped payloads |
 | ✅ | Reach `~/.ssh` by indirection — traversal, symlink, case variants |
 | ✅ | Talk past a confirmation gate |
 | ✅ | Force a private task to the cloud |
-| ✅ | Dependency audit: all **11** pinned with every hash, each justified |
-| ✅ | Swift helper network check (the Python audit can't see their sockets) |
+| ✅ | Dependency audit: all 11 pinned by hash, each justified |
+| ✅ | Swift helper network check (a Python audit cannot see their sockets) |
 | ✅ | [SECURITY.md](SECURITY.md) — the threat model, including what MACman does **not** protect against |
 
-**Result: 23 attack vectors, 23 resisted** — but only after the suite found a
-**real vulnerability**. macOS filesystems are case-insensitive, so `~/.SSH/id_ed25519`
-returned live private key material while the audit scored it as passing, because
-the audit compared spellings too. Fixed in three independent checks; the suite
-now scores by inode identity.
+**23 attack vectors, 23 resisted** — but only after the suite found a **real
+vulnerability**. macOS filesystems are case-insensitive, so `~/.SSH/id_ed25519`
+returned live private key material while the audit scored it as passing,
+because the audit compared spellings too. Fixed with three independent checks;
+the suite now scores by inode identity.
 
-Two corrections came out of this beyond the fix itself:
-
-- The free tier is **11 packages, not 17**. The old number was never measured
-  after the cloud SDK was dropped.
-- On-device inference and speech were verified to open **no sockets** at
-  runtime, closing a caveat that previously rested on Apple's documentation.
-
-**Still true and worth saying:** one developer, one Mac, no external review.
-[SECURITY.md](SECURITY.md) says so in those words.
+Two corrections fell out of it: the free tier is **11 packages, not 17**, and
+on-device inference and speech were verified to open **no sockets** at runtime,
+closing a caveat that had rested on Apple's documentation.
 
 ---
 
-## Phase 2 — FaceTime *(needs your iPad)*
+## Checkpoint 2 — MACman.app ✅
 
-Co-priority with texting, and the thing you originally set out to build.
+### Why the app is a security improvement, not a coat of paint
 
-**Already proven:** Core Audio process taps capture one app's audio without
-touching the rest of the system — verified, 1.4 MB captured at 48kHz.
-On-device transcription is perfect on clean speech. Speaking into BlackHole
-works, speakers untouched.
+Three things got better, and the third settles it.
 
-| | Task |
-|---|---|
-| 👤 | **Second Apple device** — the hard blocker; nothing below it works without one |
-| ✅ | **Code over voice** — a spoken code carries no digits; converting it closed a credential leak *before* the channel opened |
-| ✅ | Transcription proven adequate for call audio, and errors proven not to change actions |
-| ⏸ | `channels/facetime` — place and answer calls, verified state per step |
-| ⏸ | Wire tap → transcription → engine → BlackHole into a live call loop |
-| ⏸ | Barge-in: stop talking when interrupted |
+**The localhost attack surface stopped existing.** No port, no token, no origin
+checks, no DNS-rebinding defence, no CSRF. Not mitigated — absent.
 
-The wake phrase already exists and is channel-agnostic (`session.py`), so voice
-inherits it. What was missing was the *code*, and that is done.
+**The browser left the trust path.** Consent is a native dialog, and an
+extension cannot read or click an `NSAlert`.
 
-**Why the rest is paused rather than in progress:** every remaining item is
-verified by making a call. Writing a call driver that has never answered a call
-is how you get code that compiles, reads well, and fails on first contact —
-and this project has already had three experiments produce confident wrong
-numbers. Building it blind would be the fourth.
+**The permission grant narrowed from Terminal to MACman.** macOS attributes a
+permission to the **responsible process** — the app that launched the one
+asking. Granting Full Disk Access to Terminal does not give it to MACman; it
+gives it to *every script you will ever run in a shell*. Granting it to
+`MACman.app` gives it to MACman alone.
 
-**Four experiments, each with a fallback:**
+> **Architectural constraint, not a preference:** the daemon must be a **child
+> of the app**. Started by `launchd`, the responsible process becomes `launchd`,
+> the permission attaches to a bare binary with no bundle, and the benefit
+> evaporates. It follows that **quitting the app stops MACman** — the UI must
+> say so rather than dying quietly.
 
-| Question | Status | If it fails |
-|---|---|---|
-| Does `AutoAcceptInvites` still work on macOS 26? | ⏸ needs a call | click Accept via Accessibility |
-| Do taps capture FaceTime specifically? | ⏸ needs a call | BlackHole as system output, worse but works |
-| **Is transcription accurate on compressed call audio?** | ✅ **yes** | — |
-| Is FaceTime's Accessibility tree drivable? | ⚠ partly | URL schemes only; fewer controls |
+### Architecture
 
-**The third one resolved, against my prediction.** I said I'd bet against it.
-AAC-ELD at 24 kbps costs nothing, 10% packet loss costs nothing, and only
-background noise below ~10 dB SNR degrades anything — worst case 9.8% WER on a
-deliberately terrible call. More to the point, **those errors changed no
-actions**: replaying the degraded transcripts scored 17/18 correct against
-16/18 clean. `Downloads → download` still produced `folder="Downloads"`.
-
-Voice-over-FaceTime does not need cloud speech-to-text, and stays free.
-Two earlier versions of that experiment were wrong before this one was right —
-[RELIABILITY.md](RELIABILITY.md#call-audio--the-prediction-was-wrong) has both.
-
-**The fourth is a partial, and it is now the risk.** The Accessibility tree is
-readable (19 nodes, 7 buttons), but **4 of 7 buttons carry no label**. An
-unlabelled control can only be addressed by tree position — the same weakness
-that measured 50% and got Accessibility clicking dropped from production.
-
-So everything now turns on one question: **is Accept labelled during an
-incoming call?**
-
-- If yes — calls are answered under allowlist control, which is the design.
-- If no — the fallback is `AutoAcceptInvites`, which answers *everyone who
-  calls*. That is a worse trade than it sounds, and I would rather ship
-  FaceTime late than ship that as the default.
-
-`AutoAcceptInvites` is **not** set on this Mac, deliberately.
-
-To re-run either experiment, use Terminal — macOS attributes permissions to the
-launching app, so they are `notDetermined` under anything else:
-
-```bash
-cd ~/Documents/MACMan
-.venv/bin/python tests/tasks/call_audio.py       # transcription vs call quality
-.venv/bin/python tests/tasks/degraded_intent.py  # do bad transcripts change actions
-.venv/bin/python tests/tasks/facetime_probe.py   # is FaceTime's UI drivable
+```
+MACman.app                          ← owns TCC grants, one stable identity
+├── Contents/MacOS/MACman           ← SwiftUI: menu bar, settings, consent
+├── Contents/Resources/
+│   ├── python/                     ← embedded CPython, pinned by SHA256
+│   ├── daemon/macman/              ← the daemon
+│   └── helpers/                    ← macman-local, -speech, -audio
+└── spawns as a CHILD ↓
+    macman bridge (Python)          ← JSON over pipes, nothing binds a port
+        ├── status · settings · activity · consent · setup
+        └── iMessage poller         ← MISSING — checkpoint 3, step 1
 ```
 
-**Also found:** FaceTime ships no `.sdef`, so AppleScript is out entirely — it
-is URL schemes plus Accessibility, which is why the fourth experiment is
-load-bearing rather than a nicety.
+### What shipped
 
-**Done when:** you call your Mac from another room, ask for something out
-loud, and it answers.
-
----
-
-## Phase 3 — The app, and making it installable
-
-The experience plan replaced the "setup web UI" idea with a native app, for a
-reason that turned out to be security rather than polish: **a localhost UI could
-not fix the permission problem, and a bundle could.** Granting Full Disk Access
-to Terminal gives it to every script the user will ever run there; granting it
-to `MACman.app` gives it to MACman alone.
-
-Full detail in `private/EXPERIENCE_PLAN.md`.
-
-| | Phase | Task | State |
+| | Phase | What | State |
 |---|---|---|---|
-| 🤖 | A | `egress.py` — one exit, described, authorised, recorded | ✅ 21/21 |
-| 🤖 | B | Wire both senders through it; consent over text | ✅ |
-| 🤖 | C | App skeleton: bundle, embedded Python, daemon as child, pipe IPC | ✅ 70 MB, self-contained |
-| 🤖 | D | Native consent dialog | ✅ 17/17 |
+| 🤖 | A | `egress.py` — one exit: describe, authorise, record | ✅ 21/21 |
+| 🤖 | B | Both senders wired through it; consent over text | ✅ |
+| 🤖 | C | Bundle, embedded Python, daemon as child, pipe IPC | ✅ 70 MB, self-contained |
+| 🤖 | D | Native consent dialog | ✅ 20/20 |
 | 🤖 | E | Settings: permissions, allowlist, engine, Keychain key | ✅ |
 | 🤖 | F | Activity view — what ran, what left | ✅ |
 | 🤖 | G | Setup wizard | ✅ |
-| 👤 | — | Create a self-signed **MACman Dev** certificate so permissions survive rebuilds | ⬜ |
-| 👤 | — | Decide on $99 Apple signing once the app is real | ⬜ |
-| 🤖 | H | Homebrew cask → `brew install --cask nikhilnmv/tap/macman` | ⬜ next |
-| 👤 | — | Create `Nikhilnmv/homebrew-tap`, tag a release | ⬜ |
-| 🤖 | — | Fresh-machine test: wipe state, install as a stranger would | ⬜ |
 
-**Verified so far:** Full Disk Access granted to `MACman.app` reaches the child
-daemon; the daemon runs as a direct child of the app; the bundle runs entirely
-from its own Python with nothing from the developer's environment.
+**Verified, not assumed:** Full Disk Access granted to `MACman.app` reaches the
+child daemon; the daemon runs as a direct child (`ppid` matches); the bundle
+runs entirely from its own Python, with all 34 reachable modules importable and
+the developer's `site-packages` excluded.
 
-**Done when:** someone who has never seen this can go from nothing to a working
-answer in under ten minutes, without you helping.
+**Four bugs found by running rather than reading**, each invisible on a
+developer's machine:
+
+- `MenuBarExtra` has no launch hook, so the daemon never started until someone
+  clicked the icon — the app looked fine and did nothing.
+- SIGPIPE would have killed the app when the daemon died, taking down the only
+  UI able to report it.
+- The runtime pin selected the *freethreaded* Python, which has no pyobjc
+  wheels — the install would have failed after a 30 MB download.
+- The consent reply crossed the pipe as the string `"false"`, and Python's
+  `bool("false")` is `True`. **Every refusal would have been an approval.**
 
 ---
 
-## Phase 4 — Launch
+## Checkpoint 3 — Release candidate ← **we are here**
+
+Turning a development project into something a stranger could install, use, and
+remove. Two items are not "incomplete" but **wrong**: one misleads you about
+whether MACman is running, the other leaves your API key behind after "revoke
+everything."
+
+### Decisions taken
+
+| | |
+|---|---|
+| **Poller** | The app owns it — the bridge starts the serve loop |
+| **Updates** | Homebrew cask now; in-app checker later |
+| **Fresh-install test** | A separate macOS user account |
+| **Signing** | Deferred to step 6, decided after seeing the fresh install |
+
+### The steps
+
+| | Step | What | State |
+|---|---|---|---|
+| 🤖 | 0 | Merge the two roadmaps into this document | ✅ |
+| 🤖 | 1 | **Wire the poller into the bridge** — the blocker | ⬜ |
+| 🤖 | 2 | Make revoke actually revoke, and work without the repo | ⬜ |
+| 🤖 | 3 | Rewrite TESTING.md and VERIFY.md as real-user guides, including removal | ⬜ |
+| 🤖 | 4 | Permissions cleanup guide — Claude.app, Terminal, MACman.app | ⬜ |
+| 👤 | 5 | Fresh install in a second macOS account | ⬜ |
+| 🤖 | 6 | Homebrew cask, version single-sourced, first release | ⬜ |
+| 🤖 | 7 | Final re-scored evaluation | ⬜ |
+
+**Step 1 — the poller.** The serve loop runs on a worker thread inside the
+bridge. Three things must hold:
+
+- **A poller crash must never kill the bridge**, or you lose the only surface
+  that could tell you it died.
+- **The menu bar must stop saying "Running"** when nothing is listening. It
+  should distinguish *listening*, *not listening because Full Disk Access is
+  off*, and *stopped*.
+- `macman serve` keeps working unchanged, for CLI users and for debugging.
+
+Consent-over-text becomes reachable from the app for the first time. Which
+surface asks is decided by where the request came from: a message asks over
+iMessage, anything local asks in a dialog.
+
+**Step 2 — revoke.** Currently deletes the TOTP secret only. It must also take
+the Claude key (`com.macman.cloud`, added in phase E), the app bundle, the
+state directory and the login item, and drop the dead LaunchAgent path.
+Critically it must work **without the repository** — someone who installed a
+cask has no `.venv` to run a script from.
+
+**Step 4 — permissions.** Honest limit: `TCC.db` is protected and cannot be
+read, so this will be exact per-pane instructions and behavioural probes, not
+an automated audit.
+
+**Step 5 — fresh install.** A second macOS account gives a genuinely clean TCC
+database and home folder without risking your working setup. Check early
+whether iMessage in that account is workable — it needs an Apple ID signed in.
+
+**Step 6 — the correction that matters.** `brew install --cask` **does** apply
+`com.apple.quarantine`; it is source *formula* installs that do not. So an
+unsigned `MACman.app` installed by cask will show "unidentified developer"
+unless the user passes `--no-quarantine`. Telling a security-conscious user to
+bypass Gatekeeper for a Full-Disk-Access tool undercuts everything else here.
+
+| Path | Cost | First impression |
+|---|---|---|
+| Cask + sign & notarize | $99/yr | Clean, no warning |
+| Cask, unsigned | £0 | Gatekeeper warning, or `--no-quarantine` in the docs |
+| Formula (source build) | £0 | No warning, but needs Xcode and a build |
+
+**Done when:** someone who has never seen this can install it, use it, and
+remove it completely, without you helping.
+
+---
+
+## Checkpoint 4 — FaceTime ⏸ *(needs a second Apple device)*
+
+**Already proven:** Core Audio process taps capture one app's audio without
+touching system output (1.4 MB at 48 kHz). Speaking into BlackHole works with
+speakers untouched. Transcription survives call audio. A spoken code is
+converted to digits, which closed a credential leak *before* the channel
+existed.
+
+| | Task | State |
+|---|---|---|
+| 👤 | **Second Apple device** — the hard blocker | ⬜ |
+| ✅ | Code over voice | ✅ |
+| ✅ | Transcription adequate for call audio, errors change no actions | ✅ |
+| ⏸ | `channels/facetime` — place and answer calls | ⏸ |
+| ⏸ | Wire tap → transcription → engine → BlackHole into a live loop | ⏸ |
+| ⏸ | Barge-in: stop talking when interrupted | ⏸ |
+
+| Experiment | Status | Fallback |
+|---|---|---|
+| Does `AutoAcceptInvites` still work on macOS 26? | ⏸ needs a call | click Accept via Accessibility |
+| Do taps capture FaceTime specifically? | ⏸ needs a call | BlackHole as system output |
+| Is transcription accurate on compressed call audio? | ✅ **yes** | — |
+| Is FaceTime's Accessibility tree drivable? | ⚠ partly | URL schemes only |
+
+**The transcription result went against my prediction.** AAC-ELD at 24 kbps
+costs nothing, 10% packet loss costs nothing, and only noise below ~10 dB SNR
+degrades anything — worst case 9.8% WER on a deliberately terrible call. And
+those errors **changed no actions**: degraded transcripts scored 17/18 correct
+against 16/18 clean. Voice over FaceTime does not need cloud speech-to-text.
+
+**The Accessibility result is now the risk.** The tree is readable (19 nodes,
+7 buttons) but **4 of 7 buttons carry no label**, addressable only by tree
+position — the weakness that measured 50% and got clicking dropped from
+production. Everything turns on one question: **is Accept labelled during an
+incoming call?** If not, the only fallback is `AutoAcceptInvites`, which answers
+*everyone who calls*. I would rather ship FaceTime late than default to that.
+It is deliberately not set on this Mac.
+
+**Why the rest is paused rather than in progress:** every remaining item is
+verified by making a call. A call driver that has never answered a call is code
+that compiles, reads well, and fails on first contact.
+
+---
+
+## Checkpoint 5 — Launch
 
 | | Task |
 |---|---|
-| 🤖 | User docs: what it does, what it can't, what it will never do |
-| 🤖 | Landing page live on GitHub Pages |
-| 🤖 | Security page: threat model, what to check before trusting it |
+| 🤖 | Landing page: own domain, static, **no analytics and no third-party requests** — a privacy tool whose site loads Google Fonts is not credible |
+| 🤖 | Lead with proof: "nothing leaves your Mac", with the commands to verify it |
+| 🤖 | Honest ceiling: what a ~3B on-device model cannot do |
+| 👤 | Check `macman.sh` / `getmacman.com` / `macman.app` for availability and name conflicts |
 | 👤 | Announce — Hacker News, r/macapps, Mac communities |
-| 👤 | Decide what support burden you'll carry |
+| 👤 | Decide what support burden you will carry |
+
+`docs/index.html` should be deleted rather than improved; it describes a
+different product.
 
 **Realistic outcome:** a few hundred stars, a handful of daily users, some
-issues. That's a good result for an honest tool in a crowded space.
+issues. That is a good result for an honest tool in a crowded space.
 
 ---
 
 ## Later, and honestly optional
 
-| | Why it's not prioritised |
+| | Why it is not prioritised |
 |---|---|
-| Signed, notarized `.app` | $99/yr. Worth it **once people use this**, not before |
+| In-app updater (Sparkle) | Wants a signed app, and an update channel is attack surface for a tool holding Full Disk Access |
 | Level 4 (vision, unscriptable apps) | Needs a funded API key; genuinely paid |
 | More primitives | Each is hand-written; add them when a real user asks |
-| AirDrop | No scriptable path; UI automation is 50% and sends the wrong file to the wrong person |
+| AirDrop | No scriptable path; UI automation measured 50% and would send the wrong file to the wrong person |
 
 ---
 
@@ -253,20 +322,44 @@ issues. That's a good result for an honest tool in a crowded space.
 | Risk | Honest assessment |
 |---|---|
 | **Nobody installs it** | Most likely outcome. Six permissions is a big ask from an unknown author |
-| **A security incident** | Would be fatal to trust and could genuinely harm someone. Why phase 1 is first |
+| **A security incident** | Fatal to trust, and could genuinely harm someone. Why checkpoint 1 came first |
+| **No way to ship a fix** | Real today: no tags, no cask, no update path. A security fix would reach nobody |
 | **Apple or Anthropic ship it better** | Anthropic already has remote Mac control. Compete on privacy, not features |
-| **You lose interest** | It's already useful to you. Phase 1 alone leaves something worth keeping |
-| Apple changes an API | AppleScript is stable; Accessibility isn't, which is why we barely use it |
+| **You lose interest** | It is already useful to you. Checkpoint 1 alone leaves something worth keeping |
+| Apple changes an API | AppleScript is stable; Accessibility is not, which is why we barely use it |
+
+---
+
+## Open questions
+
+1. **Domain name**, and has "MACman" been checked against existing Mac tools?
+2. **Signing** — $99 now, or ship unsigned and accept the Gatekeeper warning?
+3. **Does the CLI stay a first-class path?** It currently means every feature
+   needs two front ends, and `appsettings`/`appactivity`/`appsetup` are already
+   app-only.
+
+Settled, and recorded so they are not re-litigated:
+
+- **Pre-approvals expire** — 90 day cap. Consent that never expires becomes a
+  setting nobody remembers choosing.
+- **Activity shows no new data.** The audit log already stores result hashes
+  rather than content, and excludes note bodies and message text. A view that
+  captured more would be a second copy of your data made to reassure you about
+  the first.
+- **Consent never lives in a window** — a browser extension can read and click
+  a page, but not an `NSAlert`.
 
 ---
 
 ## How we work
 
-- **Measure before believing.** Three assumptions about the on-device model
-  were wrong this month; repeated trials caught each one. Single runs mislead.
+- **Measure before believing.** Several assumptions about the on-device model
+  were wrong; repeated trials caught each one. Single runs mislead.
 - **Typed arguments, never composed strings.** 8/8 versus 1/5, and a security
   property as much as a reliability one.
 - **Fail loudly at the boundary.** "That needs a key" beats a confident wrong
   answer, every time.
 - **Publish the numbers that look bad.** The 50% accessibility result is why we
-  don't click things. Hiding it would invite someone to re-propose it.
+  do not click things. Hiding it would invite someone to re-propose it.
+- **A test that has never failed has not passed.** Two audits scored perfectly
+  while the thing they guarded was broken.
