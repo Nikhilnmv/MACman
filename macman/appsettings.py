@@ -250,6 +250,35 @@ def add_pre_approval(category: str, path: str, days: int) -> str:
     return f"{category} tasks under {folder} for {span} day(s)"
 
 
+def add_handle(handle: str) -> list[str]:
+    """Add one handle to the allowlist, atomically.
+
+    Takes the *intent*, not a computed list, and that distinction is the whole
+    point. The settings window used to send the new list it had worked out
+    itself — `existing + [new]` — which silently loses data whenever its copy
+    of `existing` is stale or has not loaded yet. Opening the window and typing
+    a handle before the first reply arrived wrote a list containing only that
+    handle, discarding every other one.
+
+    Reading and writing here means the daemon, which owns the file, is the only
+    thing that ever decides what the list becomes.
+    """
+    current = list(userconfig.load().get("allowed_handles", []))
+    cleaned = _validate_handles([*current, handle])
+    userconfig.update(allowed_handles=cleaned)
+    return cleaned
+
+
+def remove_handle(handle: str) -> list[str]:
+    """Remove one handle from the allowlist, atomically. See `add_handle`."""
+    current = list(userconfig.load().get("allowed_handles", []))
+    remaining = [h for h in current if h != handle.strip()]
+    if remaining == current:
+        raise SettingRejected(f"{handle!r} is not on the allowlist.")
+    userconfig.update(allowed_handles=remaining)
+    return remaining
+
+
 def revoke_credentials() -> str:
     """Delete every stored credential, leaving the install in place.
 

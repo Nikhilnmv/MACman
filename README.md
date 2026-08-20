@@ -187,6 +187,7 @@ used. A wrong click isn't a wrong answer — it presses something.
 | [PERMISSIONS.md](docs/PERMISSIONS.md) | What macOS access was granted, to which app, and how to take it back |
 | [TESTING.md](docs/TESTING.md) | Install it, use it, and **remove it completely** |
 | [VERIFY.md](docs/VERIFY.md) | Test every capability from your phone, with expected answers |
+| [FRESH_INSTALL.md](docs/FRESH_INSTALL.md) | Test it as a stranger would, in a clean macOS account |
 | [COMMANDS.md](docs/COMMANDS.md) | Everything it can do, and how to ask |
 | [RELIABILITY.md](docs/RELIABILITY.md) | Every measurement, with the method |
 | [CAPABILITY.md](docs/CAPABILITY.md) | Architecture, and the free/paid boundary |

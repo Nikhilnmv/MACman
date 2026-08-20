@@ -253,6 +253,50 @@ def secret_checks() -> list[Check]:
             not missing,
             f"{len(services)} known" if not missing else f"MISSES {missing}"))
 
+    # The allowlist decides who can command this Mac, so losing an entry is a
+    # security-relevant bug, not a UI annoyance — and losing *all* of them
+    # silently turns MACman off in a way nothing reports.
+    #
+    # This existed: the settings window computed the new list itself and posted
+    # it, so a window whose snapshot had not loaded yet wrote a list containing
+    # only the handle just typed. It emptied a real allowlist. The operations
+    # are now intent-based, and the daemon is the only thing that decides what
+    # the list becomes.
+    from macman import userconfig
+
+    original = list(userconfig.load().get("allowed_handles", []))
+    try:
+        userconfig.update(allowed_handles=["+447700900001", "+447700900002"])
+        appsettings.add_handle("+447700900003")
+        after_add = userconfig.load()["allowed_handles"]
+        results.append(Check(
+            "adding a handle keeps the existing ones",
+            len(after_add) == 3,
+            f"{len(after_add)} handles" if len(after_add) == 3
+            else f"LOST DATA: {after_add}"))
+
+        appsettings.remove_handle("+447700900001")
+        after_remove = userconfig.load()["allowed_handles"]
+        results.append(Check(
+            "removing one handle keeps the others",
+            after_remove == ["+447700900002", "+447700900003"],
+            f"{len(after_remove)} left" if len(after_remove) == 2
+            else f"WRONG: {after_remove}"))
+
+        # An invalid handle must not be able to corrupt a good list.
+        try:
+            appsettings.add_handle("not-a-handle")
+            rejected = False
+        except appsettings.SettingRejected:
+            rejected = True
+        preserved = userconfig.load()["allowed_handles"] == after_remove
+        results.append(Check(
+            "a rejected handle leaves the list untouched",
+            rejected and preserved,
+            "rejected, list intact" if rejected and preserved else "LIST DAMAGED"))
+    finally:
+        userconfig.update(allowed_handles=original)
+
     # Only known fields may be written, so a hostile or buggy app cannot
     # inject arbitrary keys into the config file.
     try:

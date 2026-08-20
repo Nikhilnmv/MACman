@@ -285,6 +285,13 @@ def _handle_settings(kind: str, message: dict[str, Any]) -> None:
         elif kind == "remove_pre_approval":
             appsettings.remove_pre_approval(int(message.get("index", -1)))
             detail = "Pre-approval removed"
+        elif kind == "add_handle":
+            stored = appsettings.add_handle(str(message.get("handle", "")))
+            detail = f"Allowlist now has {len(stored)} handle(s)"
+        elif kind == "remove_handle":
+            stored = appsettings.remove_handle(str(message.get("handle", "")))
+            detail = (f"Removed. {len(stored)} handle(s) left"
+                      if stored else "Removed. Nobody can reach MACman now")
         elif kind == "revoke_credentials":
             detail = appsettings.revoke_credentials()
             if _poller is not None:
@@ -440,7 +447,8 @@ def run() -> int:
                 threading.Thread(target=_run_self_test, daemon=True).start()
             elif kind in {"settings_set", "set_cloud_key", "clear_cloud_key",
                           "add_pre_approval", "remove_pre_approval",
-                          "open_permission", "revoke_credentials"}:
+                          "open_permission", "revoke_credentials",
+                          "add_handle", "remove_handle"}:
                 _handle_settings(kind, message)
             elif kind == "consent_selftest":
                 # Exercises the whole consent path — daemon to dialog and back

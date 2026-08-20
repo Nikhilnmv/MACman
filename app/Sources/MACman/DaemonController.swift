@@ -198,14 +198,25 @@ final class DaemonController: ObservableObject {
         send(["type": "settings_set", "field": field, "value": value])
     }
 
+    // Both send an *intent*, never a computed list.
+    //
+    // These used to send `settings.allowed_handles + [new]`, working out the
+    // result here and posting it. That loses data whenever this copy of the
+    // list is stale or has not arrived yet — the snapshot starts empty and
+    // fills in asynchronously, so adding a handle in a freshly opened window
+    // could write a list containing only that handle and silently discard the
+    // rest. It emptied a real allowlist during testing.
+    //
+    // The daemon owns the file; it should be the only thing deciding what the
+    // list becomes.
     func addHandle(_ handle: String) {
         let trimmed = handle.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        setField("allowed_handles", settings.allowed_handles + [trimmed])
+        send(["type": "add_handle", "handle": trimmed])
     }
 
     func removeHandle(_ handle: String) {
-        setField("allowed_handles", settings.allowed_handles.filter { $0 != handle })
+        send(["type": "remove_handle", "handle": handle])
     }
 
     /// The key crosses the pipe to the daemon, which puts it in the Keychain.
