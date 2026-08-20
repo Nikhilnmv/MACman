@@ -51,7 +51,7 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from macman import appsettings, config
+from macman import appactivity, appsettings, config
 from macman.channels.appconfirm import AppConfirmer
 from macman.security import permissions
 
@@ -274,6 +274,9 @@ def run() -> int:
                 confirmer.resolve(str(message.get("id", "")), message.get("ok"))
             elif kind == "settings":
                 _emit({"type": "settings", **appsettings.read()})
+            elif kind == "activity":
+                _emit({"type": "activity",
+                       **appactivity.read(int(message.get("limit", 100)))})
             elif kind in {"settings_set", "set_cloud_key", "clear_cloud_key",
                           "add_pre_approval", "remove_pre_approval",
                           "open_permission"}:

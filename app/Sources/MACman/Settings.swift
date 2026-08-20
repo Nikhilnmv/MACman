@@ -62,6 +62,7 @@ struct SettingsWindow: View {
         case permissions = "Permissions"
         case access = "Who can reach me"
         case engine = "Engine"
+        case activity = "Activity"
         var id: String { rawValue }
     }
 
@@ -76,6 +77,9 @@ struct SettingsWindow: View {
             EngineTab(daemon: daemon)
                 .tabItem { Text(Tab.engine.rawValue) }
                 .tag(Tab.engine)
+            ActivityTab(daemon: daemon)
+                .tabItem { Text(Tab.activity.rawValue) }
+                .tag(Tab.activity)
         }
         .frame(width: 540, height: 460)
         .onAppear { daemon.loadSettings() }

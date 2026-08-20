@@ -44,6 +44,7 @@ final class DaemonController: ObservableObject {
     @Published private(set) var state: State = .stopped
     @Published private(set) var status = DaemonStatus()
     @Published private(set) var settings = SettingsSnapshot()
+    @Published private(set) var activity = ActivitySnapshot()
     /// Result of the last settings change, shown briefly in the window. A
     /// rejected value must say why — silently reverting a field the user typed
     /// is the most confusing thing a settings pane can do.
@@ -151,6 +152,8 @@ final class DaemonController: ObservableObject {
 
     func loadSettings() { send(["type": "settings"]) }
 
+    func loadActivity() { send(["type": "activity", "limit": 200]) }
+
     func openPermission(_ key: String) {
         send(["type": "open_permission", "key": key])
     }
@@ -239,6 +242,12 @@ final class DaemonController: ObservableObject {
             if let decoded = try? JSONDecoder().decode(SettingsSnapshot.self,
                                                        from: line) {
                 settings = decoded
+            }
+
+        case "activity":
+            if let decoded = try? JSONDecoder().decode(ActivitySnapshot.self,
+                                                       from: line) {
+                activity = decoded
             }
 
         case "settings_result":
