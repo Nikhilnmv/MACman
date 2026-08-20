@@ -64,6 +64,20 @@ cp "${BINARY}" "${BUNDLE}/Contents/MacOS/${APP_NAME}"
 cp Resources/Info.plist "${BUNDLE}/Contents/Info.plist"
 printf 'APPL????' > "${BUNDLE}/Contents/PkgInfo"
 
+# Stamp the version from macman/__init__.py, the single source. Info.plist
+# used to carry its own copy, so the app and the Python package could disagree
+# about which version was installed — and nothing would have noticed.
+VERSION="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' ../macman/__init__.py)"
+if [[ -z "${VERSION}" ]]; then
+    echo "   could not read __version__ from macman/__init__.py" >&2
+    exit 1
+fi
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" \
+    "${BUNDLE}/Contents/Info.plist" >/dev/null
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION}" \
+    "${BUNDLE}/Contents/Info.plist" >/dev/null
+echo "── Version ${VERSION}"
+
 # Without --embed the daemon runs from the repository's virtualenv, which is
 # what you want while developing: no 60 MB copy per build, and edits to the
 # Python take effect on the next launch rather than the next bundle.

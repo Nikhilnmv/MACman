@@ -193,6 +193,7 @@ used. A wrong click isn't a wrong answer — it presses something.
 | [CAPABILITY.md](docs/CAPABILITY.md) | Architecture, and the free/paid boundary |
 | [DESIGN.md](docs/DESIGN.md) | Why it's built this way |
 | [ROADMAP.md](docs/ROADMAP.md) | The single plan — what's done, what's next |
+| [CHANGELOG.md](docs/CHANGELOG.md) | What changed, and **how updates reach you** |
 | [SHIPPING.md](docs/SHIPPING.md) | Why earning trust is the hard part of shipping this |
 
 ---

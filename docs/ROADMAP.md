@@ -24,7 +24,7 @@ MACman.app                  █████████████████�
 Actually usable end-to-end  ████████████████░░░░  app answers texts; unverified by you
 Local voice                 ████████████████░░░░  works; unverified by you
 FaceTime calling            ██████████░░░░░░░░░░  audio + auth proven; driver needs a call
-Distribution & updates      ░░░░░░░░░░░░░░░░░░░░  nothing: no tags, no cask, no update path
+Distribution & updates      ████████████░░░░░░░░  cask + release tooling; nothing published yet
 ```
 
 ---
@@ -196,8 +196,8 @@ everything."
 | 🤖 | 3 | Rewrite TESTING.md and VERIFY.md as real-user guides, including removal | ✅ |
 | 🤖 | 4 | Permissions cleanup guide — Claude.app, Terminal, MACman.app | ✅ |
 | 👤 | 5 | Fresh install in a second macOS account | 🔬 checklist ready, yours to run |
-| 🤖 | 6 | Homebrew cask, version single-sourced, first release | ⬜ next |
-| 🤖 | 7 | Final re-scored evaluation | ⬜ |
+| 🤖 | 6 | Homebrew cask, version single-sourced, release tooling | ✅ *(publishing is yours)* |
+| 🤖 | 7 | Final re-scored evaluation | ⬜ next |
 
 **Step 1 — the poller.** The serve loop runs on a worker thread inside the
 bridge. Three things must hold:

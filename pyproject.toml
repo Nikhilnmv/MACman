@@ -1,6 +1,6 @@
 [project]
 name = "macman"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Call or text your Mac, tell it what you need out loud, watch it work."
 requires-python = ">=3.11"
 
@@ -35,6 +35,9 @@ dev = ["pytest>=8.0", "ruff>=0.6"]
 [project.scripts]
 macman = "macman.main:main"
 macman-preflight = "macman.preflight:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "macman.__version__"}
 
 [build-system]
 requires = ["setuptools>=68"]

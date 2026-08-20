@@ -23,10 +23,13 @@
     <string>MACman</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <!-- Both are overwritten at build time from macman/__init__.py, which is
+         the single source of the version. The values here are placeholders;
+         if you see 0.0.0 in a shipped build, build.sh did not run. -->
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>0.0.0</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>0.0.0</string>
     <key>LSMinimumSystemVersion</key>
     <string>15.0</string>
 
