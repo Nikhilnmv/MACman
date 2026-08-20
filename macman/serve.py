@@ -48,6 +48,53 @@ class Daemon:
         #: who was asked, and their reply must not answer someone else's.
         self._confirmers: dict[str, TextConfirmer] = {}
         self._manager = SessionManager(dispatch=self._dispatch, audit=self.audit)
+        #: Set to end the poll loop. `poll()` sleeps internally, so it checks
+        #: this rather than relying on the consumer stopping iteration.
+        self._stop = threading.Event()
+
+    # ----------------------------------------------------------------- #
+    # Embedding
+    #
+    # `run()` below is the CLI: it prints and blocks until Ctrl-C. MACman.app
+    # cannot use it — the app's daemon speaks JSON on stdout, and a stray
+    # `print` would corrupt the protocol mid-conversation. So the checks and
+    # the loop are separated from the reporting, and the app supplies its own.
+    # ----------------------------------------------------------------- #
+
+    def blocked_because(self) -> str | None:
+        """Why serving cannot start, or None if it can.
+
+        Returned rather than printed so the same check can become a terminal
+        message, a menu bar line, or an audit record.
+        """
+        if not config.ALLOWED_HANDLES:
+            return ("Nobody is on the allowlist, so every message would be "
+                    "ignored. Add a handle in Settings.")
+        try:
+            imessage.latest_rowid()
+        except imessage.ChatDBUnavailable as exc:
+            return str(exc)
+        return None
+
+    def serve_forever(self) -> None:
+        """Poll and dispatch until `stop()`. Never prints, never raises.
+
+        Each message is handled on its own thread so a confirmation waiting on
+        a human cannot stall the messages queued behind it.
+        """
+        self.audit.session(session_id="daemon", event="serve_start",
+                           dry_run=self.dry_run)
+        try:
+            for message in imessage.poll(should_stop=self._stop.is_set):
+                logger.info("← %s: %s", message.handle, message.text[:60])
+                threading.Thread(
+                    target=self._handle, args=(message,), daemon=True
+                ).start()
+        finally:
+            self.audit.session(session_id="daemon", event="serve_stop")
+
+    def stop(self) -> None:
+        self._stop.set()
 
     # ----------------------------------------------------------------- #
     # Engine dispatch
@@ -151,15 +198,9 @@ class Daemon:
     # ----------------------------------------------------------------- #
 
     def run(self) -> int:
-        if not config.ALLOWED_HANDLES:
-            print("  ALLOWED_HANDLES is empty — nothing would be accepted.")
-            print("  Add your handle to macman/config.py first.")
-            return 1
-
-        try:
-            imessage.latest_rowid()
-        except imessage.ChatDBUnavailable as exc:
-            print(f"  {exc}")
+        """The CLI entry point: print, then block until Ctrl-C."""
+        if (blocked := self.blocked_because()) is not None:
+            print(f"  {blocked}")
             return 1
 
         banner = "MACman serving" + (" — DRY RUN, no engine will be called"
@@ -167,20 +208,11 @@ class Daemon:
         print(f"{banner}. Allowed: {', '.join(sorted(config.ALLOWED_HANDLES))}")
         print(f"  {lockstate.read().explain()}")
         print("  Ctrl-C to stop.\n")
-        self.audit.session(session_id="daemon", event="serve_start",
-                           dry_run=self.dry_run)
 
         try:
-            for message in imessage.poll():
-                logger.info("← %s: %s", message.handle, message.text[:60])
-                # Each message runs on its own thread so a blocking
-                # confirmation cannot stall the poll loop behind it.
-                threading.Thread(
-                    target=self._handle, args=(message,), daemon=True
-                ).start()
+            self.serve_forever()
         except KeyboardInterrupt:
             print("\n  Stopped.")
-            self.audit.session(session_id="daemon", event="serve_stop")
         return 0
 
 

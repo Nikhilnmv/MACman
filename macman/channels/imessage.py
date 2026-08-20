@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
 from macman import config
 from macman.agent.tools import applescript
@@ -38,6 +38,12 @@ _NANOSECOND_THRESHOLD = 1e11
 
 #: Where the last-seen ROWID is persisted, so a restart doesn't replay history.
 _CURSOR_FILE = config.STATE_DIR / "imessage_cursor"
+
+#: How many consecutive `chat.db` read failures to tolerate before giving up.
+#: Above zero because the database belongs to Messages.app and is occasionally
+#: busy; bounded because a permission that has genuinely been revoked should
+#: surface in the menu bar rather than retrying in silence forever.
+MAX_CONSECUTIVE_READ_FAILURES = 5
 
 
 class ChatDBUnavailable(RuntimeError):
@@ -216,7 +222,8 @@ MAX_MESSAGE_AGE_SECONDS = 300
 
 
 def poll(interval: float = 2.0, *, allowlist: frozenset[str] | None = None,
-         max_age_seconds: float = MAX_MESSAGE_AGE_SECONDS) -> Iterator[Message]:
+         max_age_seconds: float = MAX_MESSAGE_AGE_SECONDS,
+         should_stop: Callable[[], bool] | None = None) -> Iterator[Message]:
     """Yield incoming messages from allowed senders as they arrive.
 
     Filtering happens here, before anything reaches an engine: a message from an
@@ -236,6 +243,12 @@ def poll(interval: float = 2.0, *, allowlist: frozenset[str] | None = None,
             An empty allowlist permits nothing, which is the safe default.
         max_age_seconds: Messages older than this are skipped. A backfill
             advances the cursor past them without running anything.
+        should_stop: Checked once per cycle; returning True ends the loop.
+            Needed because the sleep happens *inside* here, so a consumer that
+            simply stops iterating would leave this thread parked until the
+            next message arrived — which, for a Mac nobody is texting, is
+            never. `macman serve` leaves this None and exits on Ctrl-C; the
+            app passes a flag so quitting is immediate.
     """
     permitted = config.ALLOWED_HANDLES if allowlist is None else allowlist
 
@@ -245,8 +258,27 @@ def poll(interval: float = 2.0, *, allowlist: frozenset[str] | None = None,
         cursor = latest_rowid()
         save_cursor(cursor)
 
-    while True:
-        for message in read_since(cursor):
+    #: Consecutive read failures. A blip must not stop MACman forever, and a
+    #: real revocation must not be swallowed forever — so transient errors are
+    #: tolerated and a persistent one is raised.
+    failures = 0
+
+    while not (should_stop and should_stop()):
+        try:
+            batch = read_since(cursor)
+            failures = 0
+        except ChatDBUnavailable:
+            # `chat.db` is a live database owned by another program. It can be
+            # briefly unreadable — Messages compacting it, a WAL checkpoint,
+            # Full Disk Access revoked and restored. Dying on the first blip
+            # would leave MACman silently deaf until someone noticed.
+            failures += 1
+            if failures > MAX_CONSECUTIVE_READ_FAILURES:
+                raise
+            time.sleep(min(interval * failures, 10.0))
+            continue
+
+        for message in batch:
             cursor = message.rowid
             save_cursor(cursor)
             if message.is_from_me or message.handle not in permitted:
@@ -255,7 +287,14 @@ def poll(interval: float = 2.0, *, allowlist: frozenset[str] | None = None,
             if age > max_age_seconds:
                 continue  # backfilled history, not a live request
             yield message
-        time.sleep(interval)
+
+        # Slept in short slices rather than one `interval`, so a stop request
+        # is honoured in milliseconds. Quitting the app should not wait out a
+        # poll cycle.
+        slept = 0.0
+        while slept < interval and not (should_stop and should_stop()):
+            time.sleep(min(0.1, interval - slept))
+            slept += 0.1
 
 
 # --------------------------------------------------------------------------- #

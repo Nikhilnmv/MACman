@@ -24,6 +24,11 @@ struct DaemonStatus: Decodable, Equatable {
     var sentOut: Int = 0
     var detail: String = ""
     var error: String?
+    /// True only when the iMessage poller is actually running. Separate from
+    /// the app being alive, because for a while those were conflated and the
+    /// menu bar said "Running" while nothing was listening.
+    var listening: Bool = false
+    var listenDetail: String = ""
 }
 
 @MainActor
@@ -156,6 +161,9 @@ final class DaemonController: ObservableObject {
     }
 
     func refresh() { send(["type": "ping"]) }
+
+    func startListening() { send(["type": "start_listening"]) }
+    func stopListening() { send(["type": "stop_listening"]) }
 
     // MARK: - Settings
 

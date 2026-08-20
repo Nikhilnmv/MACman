@@ -77,7 +77,9 @@ struct MenuBarLabel: View {
     @ObservedObject var daemon: DaemonController
 
     var body: some View {
-        Image(systemName: daemon.state.symbolName)
+        Image(systemName: daemon.state == .running && !daemon.status.listening
+              ? "desktopcomputer.trianglebadge.exclamationmark"
+              : daemon.state.symbolName)
     }
 }
 
@@ -111,6 +113,11 @@ struct MenuContent: View {
         if case .failed(let why) = daemon.state {
             Text(why)
         } else if daemon.state == .running {
+            // The reason it is not listening matters more than the fact, so it
+            // is shown in full rather than truncated to a tidy phrase.
+            if !daemon.status.listening && !daemon.status.listenDetail.isEmpty {
+                Text(daemon.status.listenDetail)
+            }
             Text("\(daemon.status.tasksToday) tasks today · "
                  + "\(daemon.status.sentOut) sent out")
 
@@ -120,9 +127,9 @@ struct MenuContent: View {
             if !daemon.status.tools {
                 Text("⚠ On-device model cannot use tools")
             }
-            if !daemon.status.fullDiskAccess {
-                Text("⚠ No Full Disk Access — cannot receive texts")
-            }
+            // No separate Full Disk Access warning: when that is what stops
+            // MACman listening, `listenDetail` above already says so, and two
+            // lines about one problem read like two problems.
         }
 
         Divider()
@@ -143,7 +150,11 @@ struct MenuContent: View {
         .keyboardShortcut(",")
 
         if daemon.state == .running || daemon.state == .starting {
-            Button("Stop MACman") { daemon.stop() }
+            if daemon.status.listening {
+                Button("Stop listening") { daemon.stopListening() }
+            } else {
+                Button("Start listening") { daemon.startListening() }
+            }
             Button("Refresh") { daemon.refresh() }
             Button("Show me a consent request…") { daemon.testConsent() }
         } else {
@@ -158,8 +169,15 @@ struct MenuContent: View {
         .keyboardShortcut("q")
     }
 
+    /// What the icon and first line claim.
+    ///
+    /// "Running" used to mean "the bridge process is alive", which was true
+    /// while MACman answered no messages at all. It now describes the product:
+    /// listening, or not, and why.
     private var headline: String {
         guard daemon.state == .running else { return daemon.state.summary }
-        return "Running — \(daemon.status.engine)"
+        return daemon.status.listening
+            ? "Listening for texts — \(daemon.status.engine)"
+            : "Not listening"
     }
 }

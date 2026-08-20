@@ -25,14 +25,29 @@ is gone.
 
 Both directions are one JSON object per line, flushed immediately.
 
-    app → bridge    {"type": "ping"}          request an immediate status
-                    {"type": "reload"}        settings changed on disk
-                    {"type": "shutdown"}      exit cleanly
+    app → bridge    {"type": "ping"}              request an immediate status
+                    {"type": "reload"}            settings changed on disk
+                    {"type": "start_listening"}   begin polling iMessage
+                    {"type": "stop_listening"}    stop polling
+                    {"type": "shutdown"}          exit cleanly
                     {"type": "consent_result", "id": …, "ok": true}
+                    {"type": "settings"} · {"type": "activity"} · setup verbs
 
-    bridge → app    {"type": "status", …}     periodic, and after every command
-                    {"type": "ready", …}      once, at startup
+    bridge → app    {"type": "status", …}         periodic, and after commands
+                    {"type": "ready", …}          once, at startup
                     {"type": "consent", "id": …, "reason": …, "body": …}
+
+## This process is MACman
+
+It does two jobs: it answers the app, and it runs the iMessage poller. The
+second is the product; the first exists to make the second visible and
+controllable. They share a process because the poller must be a child of
+MACman.app for the permission model to hold, and the app already owns this
+one's pipes.
+
+They do **not** share a fate. A poller crash is caught and reported through
+the status line, because the bridge is the only thing that can tell anyone the
+poller died.
 
 Consent is asked over this pipe rather than in any UI the daemon draws itself,
 because the app is the only surface a browser extension cannot read or click.
@@ -67,6 +82,12 @@ class Status:
     `sentOut` is here because it is the headline claim, and a number that is
     almost always zero is far more convincing in the menu bar than a sentence
     about privacy in a settings pane.
+
+    `listening` is separate from `running` on purpose, and the distinction is
+    the whole point of this field existing. For a while the app reported
+    "Running" whenever the bridge was alive — while the iMessage poller was
+    not started at all, so MACman answered nothing. A status that is true of
+    the process but false of the product is worse than no status.
     """
 
     running: bool = True
@@ -78,6 +99,77 @@ class Status:
     sentOut: int = 0
     detail: str = ""
     error: str | None = None
+    #: True only when the poller is actually reading chat.db for new messages.
+    listening: bool = False
+    #: Why it is not listening, in words a user can act on.
+    listenDetail: str = ""
+
+
+class Poller:
+    """Runs the iMessage loop inside the bridge, and survives it failing.
+
+    MACman.app must be the thing that answers texts, or the permission model it
+    was built for is pointless: run from a terminal instead, the responsible
+    process is Terminal and Full Disk Access belongs to every script the user
+    will ever run there.
+
+    **A crash here must not take the bridge down.** The bridge is the only
+    surface able to report that the poller died — kill it too and the menu bar
+    simply freezes on its last cheerful state. So the thread catches
+    everything, records why, and leaves the rest of the app working.
+    """
+
+    def __init__(self) -> None:
+        self._daemon: Any = None
+        self._thread: threading.Thread | None = None
+        self._blocked: str = "not started"
+
+    @property
+    def listening(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    @property
+    def detail(self) -> str:
+        return "" if self.listening else self._blocked
+
+    def start(self) -> None:
+        if self.listening:
+            return
+
+        from macman.security.audit import AuditLog
+        from macman.serve import Daemon
+
+        daemon = Daemon(audit=AuditLog())
+        if (blocked := daemon.blocked_because()) is not None:
+            # Not an error: an empty allowlist or missing Full Disk Access is a
+            # setup state, and the user is told which rather than "failed".
+            self._blocked = blocked
+            return
+
+        def guarded() -> None:
+            try:
+                daemon.serve_forever()
+            except Exception as exc:             # noqa: BLE001 — see docstring
+                self._blocked = f"stopped after an error: {type(exc).__name__}: {exc}"[:200]
+            else:
+                self._blocked = "stopped"
+
+        self._daemon = daemon
+        self._blocked = ""
+        self._thread = threading.Thread(target=guarded, daemon=True,
+                                        name="macman-poller")
+        self._thread.start()
+
+    def stop(self) -> None:
+        if self._daemon is not None:
+            self._daemon.stop()
+        self._blocked = "stopped"
+
+    def restart(self) -> None:
+        self.stop()
+        self._daemon = None
+        self._thread = None
+        self.start()
 
 
 def _today_counts() -> tuple[int, int]:
@@ -112,10 +204,13 @@ def _today_counts() -> tuple[int, int]:
     return tasks, sent
 
 
-def read_status() -> Status:
+def read_status(poller: "Poller | None" = None) -> Status:
     """Assemble the current state. Never raises — a status line that throws
     would take the daemon down with it."""
     status = Status()
+    if poller is not None:
+        status.listening = poller.listening
+        status.listenDetail = poller.detail
     try:
         from macman.engines import local as local_engine
         from macman.preflight import _probe_full_disk_access
@@ -151,8 +246,13 @@ def _emit(payload: dict[str, Any]) -> None:
         sys.stdout.flush()
 
 
+#: Set once `run()` starts, so status can report it without threading a
+#: parameter through every call site.
+_poller: "Poller | None" = None
+
+
 def _send_status() -> None:
-    _emit({"type": "status", **asdict(read_status())})
+    _emit({"type": "status", **asdict(read_status(_poller))})
 
 
 def _handle_settings(kind: str, message: dict[str, Any]) -> None:
@@ -266,7 +366,13 @@ def run() -> int:
     outlived it would be an orphan holding access nobody can see or revoke
     from the menu bar.
     """
+    global _poller
     confirmer = AppConfirmer(send=_emit)
+    _poller = Poller()
+    # Start listening immediately: opening MACman.app should *be* running
+    # MACman. If it cannot start, the reason is reported in the status
+    # rather than the app pretending to work.
+    _poller.start()
 
     _emit({"type": "ready", "pid": os.getpid()})
     _send_status()
@@ -288,7 +394,17 @@ def run() -> int:
 
             kind = message.get("type")
             if kind == "shutdown":
+                if _poller is not None:
+                    _poller.stop()
                 return 0
+            if kind == "start_listening":
+                if _poller is not None:
+                    _poller.restart()
+                _send_status()
+            elif kind == "stop_listening":
+                if _poller is not None:
+                    _poller.stop()
+                _send_status()
             if kind == "reload":
                 # Settings are read fresh at each use, so there is nothing to
                 # invalidate — acknowledging keeps the app's state honest.
