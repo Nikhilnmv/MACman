@@ -128,11 +128,20 @@ class CloudEngine:
     client: anthropic.Anthropic = field(default_factory=anthropic.Anthropic)
 
     def __post_init__(self) -> None:
-        if not os.environ.get("ANTHROPIC_API_KEY"):
+        # Keychain first, environment second. A key in a dotfile is readable by
+        # anything running as you and survives in shell history and backups;
+        # the environment path stays only so an existing .env keeps working.
+        from macman import appsettings
+
+        key = appsettings.cloud_key()
+        if not key:
             raise RuntimeError(
-                "ANTHROPIC_API_KEY is not set — the cloud engine cannot run. "
-                "Private tasks are unaffected; they never reach this engine."
+                "No Claude key is configured — the cloud engine cannot run. "
+                "Add one in MACman's settings. Private tasks are unaffected; "
+                "they never reach this engine."
             )
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            self.client = anthropic.Anthropic(api_key=key)
 
     def run(
         self,

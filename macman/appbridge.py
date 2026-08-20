@@ -51,8 +51,9 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from macman import config
+from macman import appsettings, config
 from macman.channels.appconfirm import AppConfirmer
+from macman.security import permissions
 
 #: How often status is pushed without being asked. Short enough that the menu
 #: bar is not stale, long enough to stay invisible in Activity Monitor.
@@ -154,6 +155,54 @@ def _send_status() -> None:
     _emit({"type": "status", **asdict(read_status())})
 
 
+def _handle_settings(kind: str, message: dict[str, Any]) -> None:
+    """Apply one settings change and report the outcome.
+
+    Every failure comes back as a message the user can act on rather than an
+    exception that kills the daemon — a mistyped phone number must not take
+    MACman down.
+
+    The reply deliberately re-sends the whole settings payload on success, so
+    the window redraws from what is actually on disk rather than from what it
+    hoped it wrote.
+    """
+    try:
+        if kind == "settings_set":
+            field = str(message.get("field", ""))
+            stored = appsettings.set_field(field, message.get("value"))
+            detail = f"{field} updated"
+        elif kind == "set_cloud_key":
+            appsettings.set_cloud_key(str(message.get("key", "")))
+            detail = "Claude key saved to your Keychain"
+        elif kind == "clear_cloud_key":
+            appsettings.clear_cloud_key()
+            detail = "Claude key removed"
+        elif kind == "add_pre_approval":
+            detail = appsettings.add_pre_approval(
+                str(message.get("category", "")),
+                str(message.get("path", "")),
+                message.get("days", 30))
+        elif kind == "remove_pre_approval":
+            appsettings.remove_pre_approval(int(message.get("index", -1)))
+            detail = "Pre-approval removed"
+        elif kind == "open_permission":
+            permissions.open_settings(str(message.get("key", "")))
+            detail = "Opened System Settings"
+        else:                                   # unreachable; kept explicit
+            raise appsettings.SettingRejected(f"Unknown request {kind!r}.")
+    except appsettings.SettingRejected as rejection:
+        _emit({"type": "settings_result", "ok": False, "detail": str(rejection)})
+        return
+    except Exception as exc:                    # noqa: BLE001
+        _emit({"type": "settings_result", "ok": False,
+               "detail": f"{type(exc).__name__}: {exc}"[:200]})
+        return
+
+    _emit({"type": "settings_result", "ok": True, "detail": detail})
+    _emit({"type": "settings", **appsettings.read()})
+    _send_status()
+
+
 def _consent_selftest(confirmer: AppConfirmer) -> None:
     """Ask for consent on a fabricated disclosure and report the answer.
 
@@ -223,6 +272,12 @@ def run() -> int:
                 # `message.get("ok")` is passed through unconverted on purpose;
                 # `resolve` accepts only a real boolean true.
                 confirmer.resolve(str(message.get("id", "")), message.get("ok"))
+            elif kind == "settings":
+                _emit({"type": "settings", **appsettings.read()})
+            elif kind in {"settings_set", "set_cloud_key", "clear_cloud_key",
+                          "add_pre_approval", "remove_pre_approval",
+                          "open_permission"}:
+                _handle_settings(kind, message)
             elif kind == "consent_selftest":
                 # Exercises the whole consent path — daemon to dialog and back
                 # — without needing a cloud key or a real task. The alternative

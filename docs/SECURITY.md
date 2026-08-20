@@ -142,6 +142,20 @@ Every tool call is appended to `~/Library/Application Support/MACman/audit.jsonl
 before it runs. Tool *results* are stored as a hash, not content, so the log is
 safe to read without re-exposing what the tool touched.
 
+### Your Claude key lives in the Keychain
+
+Not in a `.env` file, which anything running as you can read and which survives
+in backups and shell history. You add it in MACman's settings; it goes straight
+to the Keychain and is **never displayed again — including to MACman's own
+settings window**, which reports only whether a key exists.
+
+A settings pane able to show you your API key is a settings pane able to leak
+it, into a screenshot or a screen recording or a support thread. Verified: the
+key never appears in the settings payload, the config file, or the audit log.
+
+An existing `ANTHROPIC_API_KEY` in the environment still works, so nothing
+breaks for anyone already set up that way — but the Keychain takes precedence.
+
 ---
 
 ## What MACman does not protect you from
@@ -245,6 +259,7 @@ Do not take the claims above on trust; they are all reproducible.
 ```bash
 .venv/bin/python tests/audit/injection.py   # attack the defences — any PASS is a break
 .venv/bin/python tests/audit/egress.py      # can data leave without you agreeing?
+.venv/bin/python tests/audit/consent.py     # can a refusal become an approval?
 .venv/bin/python tests/audit/network.py     # count outbound connections
 .venv/bin/python -m macman.main preflight   # what permissions are actually granted
 ```

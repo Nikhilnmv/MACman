@@ -25,6 +25,7 @@ in another on identical inputs.
 | **Outbound connections, private task** | **0** — audited, Python *and* Swift |
 | **Adversarial attacks resisted** | **23/23** — after one real leak was found and fixed |
 | **Egress gate checks held** | **21/21** — nothing reaches a cloud model unasked |
+| **App boundary checks held** | **17/17** — only an explicit yes approves |
 | Shell command authoring | **20%** — not offered to this model |
 
 **What MACman actually ships on:** typed tools with validated arguments. The
@@ -372,6 +373,42 @@ savings` stays a task.
 .venv/bin/python tests/tasks/spoken_code.py           # strings, no permissions
 .venv/bin/python tests/tasks/spoken_code.py --audio   # what the recogniser emits
 ```
+
+## The app boundary — 17/17
+
+Consent is answered by `MACman.app` over a pipe, so the daemon is taking the
+most consequential answer it will ever act on from another process. Everything
+crossing that boundary is treated as untrusted input — not because the app is
+expected to lie, but because a bug on either side must fail towards refusing
+(`tests/audit/consent.py`).
+
+**A fail-open bug was written and caught here.** The app replied `"ok": "false"`
+as a *string*, and Python's `bool("false")` is `True`. Every refusal would have
+been recorded as an approval, in the one place that must never fail open. The
+app now sends a real JSON boolean, and `resolve()` accepts only `is True`
+rather than anything truthy.
+
+| Attack | Result |
+|---|---|
+| Reply `"false"`, `"true"`, `1`, `"yes"`, `null`, or missing | all refuse |
+| Reply with a genuine boolean `true` | approves |
+| Reply carrying a forged request id | discarded |
+| Reply arriving after the timeout | cannot approve a later question |
+| No answer at all | refuses |
+| App unreachable / pipe closed | refuses |
+| A second question opened while one is outstanding | refuses |
+
+Settings cross the same boundary, and secrets travel one way only:
+
+| Check | Result |
+|---|---|
+| Claude key value in the settings payload | **absent** — presence reported as a boolean |
+| Claude key in the audit log or `config.toml` | **never written** |
+| Writing an unknown settings field | refused |
+
+A settings pane able to display your API key is a settings pane able to leak it
+— into a screenshot, a screen recording, or a support thread. So the key goes
+to the Keychain and is never rendered again, including to the app.
 
 ## The one exit — 21/21
 

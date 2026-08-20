@@ -48,8 +48,15 @@ struct MACmanApp: App {
             MenuBarLabel(daemon: delegate.daemon)
         }
         .menuBarExtraStyle(.menu)
+
+        Window("MACman Settings", id: SettingsWindowID) {
+            SettingsWindow(daemon: delegate.daemon)
+        }
+        .windowResizability(.contentSize)
     }
 }
+
+let SettingsWindowID = "macman-settings"
 
 /// Separate view so the icon re-renders when the daemon's state changes;
 /// observation does not reach into a `label:` closure otherwise.
@@ -83,6 +90,7 @@ extension DaemonController.State {
 
 struct MenuContent: View {
     @ObservedObject var daemon: DaemonController
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Text(headline)
@@ -105,6 +113,15 @@ struct MenuContent: View {
         }
 
         Divider()
+
+        Button("Settings…") {
+            // LSUIElement apps have no Dock icon, so a new window can open
+            // behind whatever is in front. Activate before opening.
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: SettingsWindowID)
+            daemon.loadSettings()
+        }
+        .keyboardShortcut(",")
 
         if daemon.state == .running || daemon.state == .starting {
             Button("Stop MACman") { daemon.stop() }

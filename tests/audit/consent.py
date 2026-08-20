@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Attack the app consent path.
+"""Attack the boundary between MACman.app and the daemon.
 
     .venv/bin/python tests/audit/consent.py
 
 **Any PASS here means an attack succeeded.**
+
+Two things cross this pipe that must not go wrong: the answer to "may this
+leave?", and the settings that decide what MACman will do. Secrets travel one
+way only — in.
 
 This gate decides whether data leaves the Mac, and it is reached over a pipe
 from another process. Everything crossing that boundary is treated as untrusted
@@ -141,9 +145,71 @@ def checks() -> list[Check]:
     return results
 
 
+def secret_checks() -> list[Check]:
+    """Nothing secret may travel back toward the app.
+
+    A settings pane able to display your API key is a settings pane able to
+    leak it — into a screenshot, a screen recording, or a support thread. The
+    same applies to the TOTP secret, which would let anyone mint session codes
+    forever.
+    """
+    from macman import appsettings
+
+    results: list[Check] = []
+    payload = appsettings.read()
+    flat = repr(payload)
+
+    # Presence must be reported; the value must not be.
+    results.append(Check("settings report whether a Claude key exists",
+                         "cloud_key_configured" in payload,
+                         "reported as a boolean"))
+    results.append(Check("settings report whether a login code exists",
+                         "totp_configured" in payload,
+                         "reported as a boolean"))
+
+    leaked = [name for name in ("sk-ant-", "ANTHROPIC_API_KEY") if name in flat]
+    results.append(Check("no Claude key material in the settings payload",
+                         not leaked,
+                         "clean" if not leaked else f"LEAKED {leaked}"))
+
+    # If a key is configured, prove its actual value is absent rather than
+    # relying on the prefix check above.
+    actual = appsettings.cloud_key()
+    if actual:
+        results.append(Check("the configured key's value is not in the payload",
+                             actual not in flat,
+                             "absent" if actual not in flat else "LEAKED THE KEY"))
+
+    # The TOTP secret must never appear either.
+    try:
+        import keyring
+
+        from macman import config
+
+        secret = keyring.get_password(config.KEYCHAIN_SERVICE, "totp")
+    except Exception:                            # noqa: BLE001
+        secret = None
+    if secret:
+        results.append(Check("the login secret is not in the payload",
+                             secret not in flat,
+                             "absent" if secret not in flat else "LEAKED THE SECRET"))
+
+    # Only known fields may be written, so a hostile or buggy app cannot
+    # inject arbitrary keys into the config file.
+    try:
+        appsettings.set_field("anything_goes", "x")
+        writable = False
+    except appsettings.SettingRejected:
+        writable = True
+    results.append(Check("unknown settings fields are refused", writable,
+                         "refused" if writable else "WROTE AN ARBITRARY FIELD"))
+
+    return results
+
+
 def main() -> int:
-    print("Consent path audit — can a refusal become an approval?\n")
-    results = checks()
+    print("App boundary audit — consent answers and settings\n")
+    results = checks() + secret_checks()
 
     broken = [check for check in results if not check.held]
     for check in results:

@@ -17,8 +17,8 @@ sitting at the machine.
 Foundation + text channel   ████████████████████  done, verified live
 Capabilities (18 tools)     ████████████████████  done, 99% selection
 Security, attacked          ████████████████████  23/23 + 21/21 egress
-Consent before anything      ███████████████████  one exit, both senders wired
-MACman.app                  ██████████████░░░░░░  runs, owns permissions, self-contained
+Consent before anything     ████████████████████  one exit, wired, dialog + 17/17
+MACman.app                  ████████████████░░░░  menu bar + settings; no wizard yet
 Local voice                 ████████████████░░░░  works; unverified by you
 FaceTime calling            ██████████░░░░░░░░░░  audio + auth proven; driver needs a call
 Ready for strangers         █████░░░░░░░░░░░░░░░  public repo; no setup UI yet
@@ -203,9 +203,9 @@ Full detail in `private/EXPERIENCE_PLAN.md`.
 | 🤖 | A | `egress.py` — one exit, described, authorised, recorded | ✅ 21/21 |
 | 🤖 | B | Wire both senders through it; consent over text | ✅ |
 | 🤖 | C | App skeleton: bundle, embedded Python, daemon as child, pipe IPC | ✅ 70 MB, self-contained |
-| 🤖 | D | Native consent dialog | ⬜ next |
-| 🤖 | E | Settings: permissions, allowlist, engine | ⬜ |
-| 🤖 | F | Activity view — what ran, what left | ⬜ |
+| 🤖 | D | Native consent dialog | ✅ 17/17 |
+| 🤖 | E | Settings: permissions, allowlist, engine, Keychain key | ✅ |
+| 🤖 | F | Activity view — what ran, what left | ⬜ next |
 | 🤖 | G | Setup wizard | ⬜ |
 | 👤 | — | Create a self-signed **MACman Dev** certificate so permissions survive rebuilds | ⬜ |
 | 👤 | — | Decide on $99 Apple signing once the app is real | ⬜ |

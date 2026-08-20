@@ -36,8 +36,18 @@ final class DaemonController: ObservableObject {
         case failed(String)
     }
 
+    struct Note: Equatable {
+        let text: String
+        let ok: Bool
+    }
+
     @Published private(set) var state: State = .stopped
     @Published private(set) var status = DaemonStatus()
+    @Published private(set) var settings = SettingsSnapshot()
+    /// Result of the last settings change, shown briefly in the window. A
+    /// rejected value must say why — silently reverting a field the user typed
+    /// is the most confusing thing a settings pane can do.
+    @Published private(set) var settingsNote: Note?
     /// Last few lines the daemon wrote to stderr. Kept because a daemon that
     /// dies silently is the worst failure this app can have — the menu bar
     /// would still look fine.
@@ -137,6 +147,41 @@ final class DaemonController: ObservableObject {
 
     func refresh() { send(["type": "ping"]) }
 
+    // MARK: - Settings
+
+    func loadSettings() { send(["type": "settings"]) }
+
+    func openPermission(_ key: String) {
+        send(["type": "open_permission", "key": key])
+    }
+
+    func setField(_ field: String, _ value: Any) {
+        send(["type": "settings_set", "field": field, "value": value])
+    }
+
+    func addHandle(_ handle: String) {
+        let trimmed = handle.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        setField("allowed_handles", settings.allowed_handles + [trimmed])
+    }
+
+    func removeHandle(_ handle: String) {
+        setField("allowed_handles", settings.allowed_handles.filter { $0 != handle })
+    }
+
+    /// The key crosses the pipe to the daemon, which puts it in the Keychain.
+    /// It is never written to the config file, never echoed back, and never
+    /// recorded in the audit log.
+    func setCloudKey(_ key: String) {
+        send(["type": "set_cloud_key", "key": key])
+    }
+
+    func clearCloudKey() { send(["type": "clear_cloud_key"]) }
+
+    func removePreApproval(_ index: Int) {
+        send(["type": "remove_pre_approval", "index": index])
+    }
+
     /// Show the consent dialog on a fabricated disclosure.
     ///
     /// Exposed in the menu rather than hidden behind a debug flag: someone
@@ -188,6 +233,25 @@ final class DaemonController: ObservableObject {
             if let decoded = try? JSONDecoder().decode(DaemonStatus.self, from: line) {
                 status = decoded
                 state = decoded.running ? .running : .failed(decoded.error ?? "stopped")
+            }
+
+        case "settings":
+            if let decoded = try? JSONDecoder().decode(SettingsSnapshot.self,
+                                                       from: line) {
+                settings = decoded
+            }
+
+        case "settings_result":
+            let ok = object["ok"] as? Bool ?? false
+            let detail = object["detail"] as? String ?? ""
+            settingsNote = Note(text: detail, ok: ok)
+            // Successes fade; failures stay until the next attempt, because a
+            // rejected value is something the user still has to fix.
+            if ok {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(4))
+                    if self.settingsNote?.text == detail { self.settingsNote = nil }
+                }
             }
 
         case "consent":
