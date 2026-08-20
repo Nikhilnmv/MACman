@@ -1,9 +1,16 @@
 // MACman's menu bar app.
 //
-// Phase C is deliberately narrow: prove the permission model. The app starts
-// the daemon as a child, shows real status, and lets the user stop it. No
-// settings, no consent dialog, no setup wizard — those come once the thing
-// they depend on is known to work.
+// Three surfaces, each with a different job:
+//
+// * **Menu bar** — state at a glance, and the controls that stop things.
+// * **Settings** — permissions, allowlist, engine, and the activity log. It can
+//   configure consent and show its history; it can never grant consent.
+// * **Setup** — first run, ordered so nothing is asked for before the user
+//   knows what MACman cannot do.
+//
+// Consent lives in none of them. It is a native dialog, because a browser
+// extension can read and click a window but not an NSAlert — see
+// ConsentDialog.swift.
 //
 // The one number that earns its place in the menu bar is `sentOut`. It is
 // almost always zero, and a zero visible without opening anything is a better
@@ -53,10 +60,16 @@ struct MACmanApp: App {
             SettingsWindow(daemon: delegate.daemon)
         }
         .windowResizability(.contentSize)
+
+        Window("Set up MACman", id: SetupWindowID) {
+            SetupWindow(daemon: delegate.daemon)
+        }
+        .windowResizability(.contentSize)
     }
 }
 
 let SettingsWindowID = "macman-settings"
+let SetupWindowID = "macman-setup"
 
 /// Separate view so the icon re-renders when the daemon's state changes;
 /// observation does not reach into a `label:` closure otherwise.
@@ -113,6 +126,12 @@ struct MenuContent: View {
         }
 
         Divider()
+
+        Button("Set up MACman…") {
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: SetupWindowID)
+            daemon.loadSetupStatus()
+        }
 
         Button("Settings…") {
             // LSUIElement apps have no Dock icon, so a new window can open

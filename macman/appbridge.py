@@ -51,7 +51,7 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from macman import appactivity, appsettings, config
+from macman import appactivity, appsettings, appsetup, config
 from macman.channels.appconfirm import AppConfirmer
 from macman.security import permissions
 
@@ -203,6 +203,34 @@ def _handle_settings(kind: str, message: dict[str, Any]) -> None:
     _send_status()
 
 
+def _handle_provision(force: bool) -> None:
+    """Create a login code and hand back its URI for display as a QR.
+
+    The only outbound secret in the protocol, and only from an action the user
+    asked for. It is not logged here, and `appsettings.read()` will never
+    return it — see appsetup's module docstring.
+    """
+    try:
+        uri = appsetup.provision(force=force)
+    except RuntimeError as exc:
+        # Already provisioned and force not set. Not an error worth a stack
+        # trace: it is the guard against silently invalidating a working code.
+        _emit({"type": "provision_result", "ok": False, "detail": str(exc),
+               "already_configured": True})
+        return
+    except Exception as exc:                     # noqa: BLE001
+        _emit({"type": "provision_result", "ok": False,
+               "detail": f"{type(exc).__name__}: {exc}"[:200]})
+        return
+    _emit({"type": "provision_result", "ok": True, "uri": uri})
+
+
+def _run_self_test() -> None:
+    result = appsetup.self_test()
+    _emit({"type": "self_test_result", **result.as_dict()})
+    _send_status()
+
+
 def _consent_selftest(confirmer: AppConfirmer) -> None:
     """Ask for consent on a fabricated disclosure and report the answer.
 
@@ -277,6 +305,17 @@ def run() -> int:
             elif kind == "activity":
                 _emit({"type": "activity",
                        **appactivity.read(int(message.get("limit", 100)))})
+            elif kind == "setup_status":
+                _emit({"type": "setup_status", **appsetup.status()})
+            elif kind == "provision_code":
+                _handle_provision(bool(message.get("force", False)))
+            elif kind == "verify_code":
+                _emit({"type": "verify_result",
+                       "ok": appsetup.verify(str(message.get("code", "")))})
+            elif kind == "self_test":
+                # On a worker thread: a local inference takes seconds, and the
+                # read loop must stay responsive or the app looks hung.
+                threading.Thread(target=_run_self_test, daemon=True).start()
             elif kind in {"settings_set", "set_cloud_key", "clear_cloud_key",
                           "add_pre_approval", "remove_pre_approval",
                           "open_permission"}:

@@ -18,10 +18,10 @@ Foundation + text channel   █████████████████�
 Capabilities (18 tools)     ████████████████████  done, 99% selection
 Security, attacked          ████████████████████  23/23 + 21/21 egress
 Consent before anything     ████████████████████  one exit, wired, dialog + 17/17
-MACman.app                  ██████████████████░░  menu bar, settings, activity
+MACman.app                  ████████████████████  menu bar, settings, activity, setup
 Local voice                 ████████████████░░░░  works; unverified by you
 FaceTime calling            ██████████░░░░░░░░░░  audio + auth proven; driver needs a call
-Ready for strangers         █████░░░░░░░░░░░░░░░  public repo; no setup UI yet
+Ready for strangers         ██████████░░░░░░░░░░  setup UI done; not packaged or signed
 ```
 
 **What exists:** a working tool *you* can use. Text your Mac, it authenticates,
@@ -206,10 +206,10 @@ Full detail in `private/EXPERIENCE_PLAN.md`.
 | 🤖 | D | Native consent dialog | ✅ 17/17 |
 | 🤖 | E | Settings: permissions, allowlist, engine, Keychain key | ✅ |
 | 🤖 | F | Activity view — what ran, what left | ✅ |
-| 🤖 | G | Setup wizard | ⬜ next |
+| 🤖 | G | Setup wizard | ✅ |
 | 👤 | — | Create a self-signed **MACman Dev** certificate so permissions survive rebuilds | ⬜ |
 | 👤 | — | Decide on $99 Apple signing once the app is real | ⬜ |
-| 🤖 | H | Homebrew cask → `brew install --cask nikhilnmv/tap/macman` | ⬜ |
+| 🤖 | H | Homebrew cask → `brew install --cask nikhilnmv/tap/macman` | ⬜ next |
 | 👤 | — | Create `Nikhilnmv/homebrew-tap`, tag a release | ⬜ |
 | 🤖 | — | Fresh-machine test: wipe state, install as a stranger would | ⬜ |
 

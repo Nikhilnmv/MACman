@@ -25,7 +25,7 @@ in another on identical inputs.
 | **Outbound connections, private task** | **0** — audited, Python *and* Swift |
 | **Adversarial attacks resisted** | **23/23** — after one real leak was found and fixed |
 | **Egress gate checks held** | **21/21** — nothing reaches a cloud model unasked |
-| **App boundary checks held** | **17/17** — only an explicit yes approves |
+| **App boundary checks held** | **20/20** — only an explicit yes approves |
 | Shell command authoring | **20%** — not offered to this model |
 
 **What MACman actually ships on:** typed tools with validated arguments. The
@@ -374,7 +374,7 @@ savings` stays a task.
 .venv/bin/python tests/tasks/spoken_code.py --audio   # what the recogniser emits
 ```
 
-## The app boundary — 17/17
+## The app boundary — 20/20
 
 Consent is answered by `MACman.app` over a pipe, so the daemon is taking the
 most consequential answer it will ever act on from another process. Everything

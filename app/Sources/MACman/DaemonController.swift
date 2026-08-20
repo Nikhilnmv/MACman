@@ -45,6 +45,15 @@ final class DaemonController: ObservableObject {
     @Published private(set) var status = DaemonStatus()
     @Published private(set) var settings = SettingsSnapshot()
     @Published private(set) var activity = ActivitySnapshot()
+    @Published private(set) var setupStatus = SetupStatus()
+    /// The TOTP provisioning URI, held only while the code step is on screen.
+    /// This is the one secret that travels outward, so it is cleared as soon
+    /// as a code verifies rather than lingering in memory for the session.
+    @Published private(set) var provisionURI: String?
+    @Published private(set) var provisionNote: String?
+    @Published private(set) var codeVerified: Bool?
+    @Published private(set) var selfTest: SelfTestResult?
+    @Published private(set) var selfTestRunning = false
     /// Result of the last settings change, shown briefly in the window. A
     /// rejected value must say why — silently reverting a field the user typed
     /// is the most confusing thing a settings pane can do.
@@ -154,6 +163,25 @@ final class DaemonController: ObservableObject {
 
     func loadActivity() { send(["type": "activity", "limit": 200]) }
 
+    // MARK: - Setup
+
+    func loadSetupStatus() { send(["type": "setup_status"]) }
+
+    func provisionCode(force: Bool) {
+        provisionNote = nil
+        send(["type": "provision_code", "force": force])
+    }
+
+    func verifyCode(_ code: String) {
+        send(["type": "verify_code", "code": code])
+    }
+
+    func runSelfTest() {
+        selfTestRunning = true
+        selfTest = nil
+        send(["type": "self_test"])
+    }
+
     func openPermission(_ key: String) {
         send(["type": "open_permission", "key": key])
     }
@@ -249,6 +277,37 @@ final class DaemonController: ObservableObject {
                                                        from: line) {
                 activity = decoded
             }
+
+        case "setup_status":
+            if let decoded = try? JSONDecoder().decode(SetupStatus.self, from: line) {
+                setupStatus = decoded
+            }
+
+        case "provision_result":
+            if object["ok"] as? Bool == true {
+                provisionURI = object["uri"] as? String
+                codeVerified = nil
+            } else {
+                provisionNote = object["detail"] as? String
+            }
+
+        case "verify_result":
+            let ok = object["ok"] as? Bool ?? false
+            codeVerified = ok
+            if ok {
+                // Verified, so the secret has served its purpose. Drop it
+                // rather than keeping it addressable for the whole session.
+                provisionURI = nil
+                loadSetupStatus()
+            }
+
+        case "self_test_result":
+            selfTestRunning = false
+            if let decoded = try? JSONDecoder().decode(SelfTestResult.self,
+                                                       from: line) {
+                selfTest = decoded
+            }
+            loadSetupStatus()
 
         case "settings_result":
             let ok = object["ok"] as? Bool ?? false

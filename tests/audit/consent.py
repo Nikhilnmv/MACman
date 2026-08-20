@@ -194,6 +194,32 @@ def secret_checks() -> list[Check]:
                              secret not in flat,
                              "absent" if secret not in flat else "LEAKED THE SECRET"))
 
+    # Provisioning is the one action that returns a secret — a TOTP URI
+    # contains it, which is what makes it scannable. That is unavoidable, so
+    # what matters is that it goes nowhere persistent.
+    #
+    # Deliberately checked *without* calling provision(): doing so would mint a
+    # new secret and invalidate whatever is in the user's authenticator app. A
+    # test that breaks your login to prove your login is safe is not a test
+    # worth having.
+    from pathlib import Path
+
+    from macman import config as macman_config
+
+    log = Path(macman_config.AUDIT_LOG)
+    logged = "otpauth://" in log.read_text(errors="replace") if log.exists() else False
+    results.append(Check("no provisioning URI in the audit log", not logged,
+                         "clean" if not logged else "LEAKED A TOTP SECRET"))
+
+    config_file = Path(macman_config.userconfig.CONFIG_PATH)
+    in_config = ("otpauth://" in config_file.read_text(errors="replace")
+                 if config_file.exists() else False)
+    results.append(Check("no provisioning URI in config.toml", not in_config,
+                         "clean" if not in_config else "LEAKED A TOTP SECRET"))
+
+    results.append(Check("settings never return a provisioning URI",
+                         "otpauth" not in flat, "absent"))
+
     # Only known fields may be written, so a hostile or buggy app cannot
     # inject arbitrary keys into the config file.
     try:
