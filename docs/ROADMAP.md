@@ -20,8 +20,8 @@ Foundation + text channel   █████████████████�
 Capabilities (18 tools)     ████████████████████  done, 99% selection
 Security, attacked          ████████████████████  84 audit checks, all held
 Consent before anything     ████████████████████  one exit, dialog + text
-MACman.app                  ████████████████░░░░  built; not yet wired to the poller
-Actually usable end-to-end  ████████░░░░░░░░░░░░  the app does not answer texts yet
+MACman.app                  ████████████████████  menu bar, settings, activity, setup, advanced
+Actually usable end-to-end  ████████████████░░░░  app answers texts; unverified by you
 Local voice                 ████████████████░░░░  works; unverified by you
 FaceTime calling            ██████████░░░░░░░░░░  audio + auth proven; driver needs a call
 Distribution & updates      ░░░░░░░░░░░░░░░░░░░░  nothing: no tags, no cask, no update path
@@ -43,16 +43,17 @@ leaves, 84 audit checks across four suites. Two genuine vulnerabilities were
 found by attacking it — a case-insensitive credential leak, and a consent path
 where every refusal would have been recorded as an approval.
 
-**The product is not connected to itself.** `MACman.app` runs the bridge —
-status, settings, activity, consent, setup — and **never starts the iMessage
-poller**. That lives in `macman serve`, which the app has no path to. So the
-menu bar says "Running" when nothing is listening, and actually using MACman
-still means a Terminal command, which puts the permission back on Terminal and
-undoes the reason the app was built. **Fixing this is checkpoint 3, step 1.**
+**The product is connected to itself, as of step 1.** For most of its life
+`MACman.app` ran the bridge and never started the iMessage poller, so the menu
+bar reported "Running" while nothing was listening and actually using MACman
+meant a Terminal command — which put the permission back on Terminal and undid
+the reason the app exists. The bridge now runs the poller, and the menu bar
+reports *listening* rather than aliveness.
 
 **Nobody has used it.** 908 tasks in the audit log, all `cli/unspecified`. Zero
 on the iMessage channel since 16 August, before the app existed. Every number
-in `RELIABILITY.md` came from one developer on one Mac.
+in `RELIABILITY.md` came from one developer on one Mac. This is now the single
+largest gap, and steps 3–5 exist to close it.
 
 The defensible position — and the only one worth building for — is this:
 **nothing else routes your personal documents to an on-device model and proves
@@ -135,7 +136,7 @@ MACman.app                          ← owns TCC grants, one stable identity
 └── spawns as a CHILD ↓
     macman bridge (Python)          ← JSON over pipes, nothing binds a port
         ├── status · settings · activity · consent · setup
-        └── iMessage poller         ← MISSING — checkpoint 3, step 1
+        └── iMessage poller         ← on its own thread, crash-isolated
 ```
 
 ### What shipped
