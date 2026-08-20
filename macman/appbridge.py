@@ -28,9 +28,16 @@ Both directions are one JSON object per line, flushed immediately.
     app → bridge    {"type": "ping"}          request an immediate status
                     {"type": "reload"}        settings changed on disk
                     {"type": "shutdown"}      exit cleanly
+                    {"type": "consent_result", "id": …, "ok": true}
 
     bridge → app    {"type": "status", …}     periodic, and after every command
                     {"type": "ready", …}      once, at startup
+                    {"type": "consent", "id": …, "reason": …, "body": …}
+
+Consent is asked over this pipe rather than in any UI the daemon draws itself,
+because the app is the only surface a browser extension cannot read or click.
+The asking thread parks on an `Event` while this loop keeps reading — see
+`channels/appconfirm`.
 """
 
 from __future__ import annotations
@@ -39,11 +46,13 @@ import json
 import os
 import select
 import sys
+import threading
 import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
 from macman import config
+from macman.channels.appconfirm import AppConfirmer
 
 #: How often status is pushed without being asked. Short enough that the menu
 #: bar is not stale, long enough to stay invisible in Activity Monitor.
@@ -129,13 +138,47 @@ def read_status() -> Status:
     return status
 
 
+#: Serialises writes: the confirmer runs on a worker thread while the read loop
+#: emits status from the main one, and interleaved lines would be unparseable.
+_write_lock = threading.Lock()
+
+
 def _emit(payload: dict[str, Any]) -> None:
-    sys.stdout.write(json.dumps(payload, sort_keys=True) + "\n")
-    sys.stdout.flush()
+    line = json.dumps(payload, sort_keys=True) + "\n"
+    with _write_lock:
+        sys.stdout.write(line)
+        sys.stdout.flush()
 
 
 def _send_status() -> None:
     _emit({"type": "status", **asdict(read_status())})
+
+
+def _consent_selftest(confirmer: AppConfirmer) -> None:
+    """Ask for consent on a fabricated disclosure and report the answer.
+
+    Runs on a worker thread on purpose: it must block exactly as a real tool
+    call does, while the read loop stays free to deliver the reply. If this
+    deadlocks, so would every real request, and better to find that here.
+    """
+    from pathlib import Path
+
+    from macman.security import egress
+
+    disclosure = egress.Disclosure(
+        destination=egress.Destination.CLAUDE_CLI,
+        precision=egress.Precision.SCOPE,
+        reason="self-test — nothing is sent whatever you choose",
+        payload=(egress.PayloadItem(str(Path.home() / "projects/example"),
+                                    "the whole project folder"),),
+        warning=("This is a test of the consent dialog. No data leaves this "
+                 "Mac regardless of which button you press."),
+        billing="Your Claude subscription — no metered API cost",
+        category="coding",
+    )
+    approved = confirmer.ask(f"sends data to {disclosure.destination.label}",
+                             disclosure.as_text())
+    _emit({"type": "consent_selftest_result", "approved": approved})
 
 
 def run() -> int:
@@ -146,6 +189,8 @@ def run() -> int:
     outlived it would be an orphan holding access nobody can see or revoke
     from the menu bar.
     """
+    confirmer = AppConfirmer(send=_emit)
+
     _emit({"type": "ready", "pid": os.getpid()})
     _send_status()
 
@@ -174,6 +219,17 @@ def run() -> int:
                 _send_status()
             elif kind == "ping":
                 _send_status()
+            elif kind == "consent_result":
+                # `message.get("ok")` is passed through unconverted on purpose;
+                # `resolve` accepts only a real boolean true.
+                confirmer.resolve(str(message.get("id", "")), message.get("ok"))
+            elif kind == "consent_selftest":
+                # Exercises the whole consent path — daemon to dialog and back
+                # — without needing a cloud key or a real task. The alternative
+                # is discovering the dialog is broken the first time something
+                # real depends on it.
+                threading.Thread(target=_consent_selftest,
+                                 args=(confirmer,), daemon=True).start()
 
         if time.monotonic() >= next_status:
             _send_status()

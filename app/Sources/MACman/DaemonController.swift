@@ -137,12 +137,25 @@ final class DaemonController: ObservableObject {
 
     func refresh() { send(["type": "ping"]) }
 
+    /// Show the consent dialog on a fabricated disclosure.
+    ///
+    /// Exposed in the menu rather than hidden behind a debug flag: someone
+    /// deciding whether to trust MACman with a cloud key should be able to see
+    /// exactly what it will ask them, before anything real depends on it. It
+    /// also exercises the full round trip, so a broken dialog is found here
+    /// rather than the first time a task needs approval.
+    func testConsent() { send(["type": "consent_selftest"]) }
+
     /// Tell the daemon its settings changed on disk.
     func reload() { send(["type": "reload"]) }
 
     // MARK: - Protocol
 
-    private func send(_ message: [String: String]) {
+    /// Takes `Any`, not `String`, so a boolean crosses the pipe as a JSON
+    /// boolean. Sending `"false"` as a string would arrive in Python as the
+    /// *string* "false", and `bool("false")` is `True` — a refusal read as
+    /// approval, in the one place that must never fail open.
+    private func send(_ message: [String: Any]) {
         guard let stdinPipe,
               let data = try? JSONSerialization.data(withJSONObject: message)
         else { return }
@@ -170,11 +183,25 @@ final class DaemonController: ObservableObject {
         switch kind {
         case "ready":
             state = .running
+
         case "status":
             if let decoded = try? JSONDecoder().decode(DaemonStatus.self, from: line) {
                 status = decoded
                 state = decoded.running ? .running : .failed(decoded.error ?? "stopped")
             }
+
+        case "consent":
+            guard let id = object["id"] as? String else { break }
+            let reason = object["reason"] as? String ?? "wants to send data"
+            let body = object["body"] as? String ?? ""
+            // The daemon's asking thread is blocked on this answer, and the
+            // dialog is modal — so reply on the next runloop turn rather than
+            // from inside the line handler, which is itself draining the pipe.
+            Task { @MainActor in
+                let approved = ConsentDialog.ask(reason: reason, body: body)
+                self.send(["type": "consent_result", "id": id, "ok": approved])
+            }
+
         default:
             break
         }

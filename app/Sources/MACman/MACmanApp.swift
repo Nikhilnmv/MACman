@@ -109,6 +109,7 @@ struct MenuContent: View {
         if daemon.state == .running || daemon.state == .starting {
             Button("Stop MACman") { daemon.stop() }
             Button("Refresh") { daemon.refresh() }
+            Button("Show me a consent request…") { daemon.testConsent() }
         } else {
             Button("Start MACman") { daemon.start() }
         }
