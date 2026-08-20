@@ -184,6 +184,7 @@ used. A wrong click isn't a wrong answer — it presses something.
 | | |
 |---|---|
 | [SECURITY.md](docs/SECURITY.md) | Threat model, and what it does **not** protect against |
+| [PERMISSIONS.md](docs/PERMISSIONS.md) | What macOS access was granted, to which app, and how to take it back |
 | [TESTING.md](docs/TESTING.md) | Install it, use it, and **remove it completely** |
 | [VERIFY.md](docs/VERIFY.md) | Test every capability from your phone, with expected answers |
 | [COMMANDS.md](docs/COMMANDS.md) | Everything it can do, and how to ask |

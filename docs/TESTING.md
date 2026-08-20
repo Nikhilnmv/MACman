@@ -225,6 +225,10 @@ Speech Recognition.
 If you granted Full Disk Access to **Terminal** at any point while testing,
 consider revoking that too. It covers every script you will ever run there.
 
+**[PERMISSIONS.md](PERMISSIONS.md)** has the full account, including a script
+that reports what is in effect right now and the exact commands to reset each
+app.
+
 ---
 
 ## Troubleshooting

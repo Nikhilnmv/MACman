@@ -319,6 +319,10 @@ without a terminal.
 
 ### The part only you can do
 
+**[PERMISSIONS.md](PERMISSIONS.md)** covers this properly: what each
+permission is for, which are actually required, which apps may be holding
+them from development work, and the exact `tccutil` commands to reset each.
+
 macOS permissions are revoked separately, in **System Settings → Privacy &
 Security**. Nothing here tries to do it for you — a program able to switch off
 its own oversight would be exactly the wrong design.
