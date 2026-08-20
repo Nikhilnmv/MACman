@@ -146,12 +146,12 @@ be challenged.
 1. **Verify v2 from a phone** — [VERIFY.md](VERIFY.md)
 2. **Network audit** — prove the privacy claim
 3. **Permission minimisation** — make each one optional
-4. **Setup web UI**
+4. **MACman.app** — owns the permissions, runs the daemon as its child
 5. **Prompt-injection testing**
 6. **Dependency audit and pinning**
 7. **Homebrew formula**
 8. **User guide** for non-technical people
-9. *(later, if it gains users)* signed and notarized `.app`
+9. *(later, if it gains users)* signed and notarized release
 
 Steps 2–3 come before the UI on purpose: a beautiful setup flow for a tool that
 can't prove its central claim is the wrong order.

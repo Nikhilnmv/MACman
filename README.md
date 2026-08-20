@@ -123,12 +123,19 @@ boundaries are worth stating plainly.
 - **Destructive actions ask first**, every time. Deleting goes to the Trash.
 - **Credential paths are refused in code** — `~/.ssh`, `~/.aws`, your Keychain.
   Not by prompting, so a jailbreak isn't enough.
+- **Nothing reaches a cloud model without you seeing exactly what.** One place
+  in the code can send data out; it describes the payload, asks, and records
+  the answer. Refusing is the default when there is nobody to ask.
+- **Permissions belong to MACman, not your Terminal.** `MACman.app` holds the
+  grants and runs the daemon as its child, so Full Disk Access covers MACman
+  alone — not every script you will ever run in a shell.
 - **Every tool call is logged** to an append-only audit file.
 - **One command turns everything off**: `scripts/revoke_all.py --revoke`
 
-These are attacked rather than asserted — **23 attack vectors, 23 resisted**
-(`tests/audit/injection.py`). One of them found a real credential leak before
-it found nothing.
+These are attacked rather than asserted — **23 attack vectors resisted**
+(`tests/audit/injection.py`) and **21 egress checks held**
+(`tests/audit/egress.py`). Each suite found a real leak before it found
+nothing.
 
 **Before you install this, read [SECURITY.md](docs/SECURITY.md)** — especially
 [what it does *not* protect you from](docs/SECURITY.md#what-macman-does-not-protect-you-from).
@@ -174,13 +181,21 @@ used. A wrong click isn't a wrong answer — it presses something.
 
 ## Status
 
-**Working:** iMessage control, 18 primitives, on-device engine, security model.
+**Working:** iMessage control, 18 primitives, on-device engine, security model,
+and the consent gate every cloud request passes through.
 
 **Voice works locally** — `macman voice` listens, acts and answers aloud using
 Apple's on-device speech, entirely offline.
 
-**Not built yet:** FaceTime calling (the remaining half of v3), a signed
-menu-bar app (v4).
+**`MACman.app` runs** — a menu bar app that owns the permissions and runs the
+daemon as its child. It carries its own Python, so it depends on nothing in
+your environment. Build it with `cd app && ./build.sh --embed`. Settings, the
+native consent dialog and the setup wizard are not built yet, so first-time
+setup is still `macman setup` in a terminal.
+
+**Not built yet:** FaceTime calling, the app's settings and setup UI, and a
+signed release. The app is currently signed ad-hoc, which means macOS forgets
+its permissions on every rebuild.
 
 **Claude Code handoff (Level 3) works**, verified — `claude_code` calls the
 `claude` CLI, which authenticates with a Claude Pro/Max subscription. No

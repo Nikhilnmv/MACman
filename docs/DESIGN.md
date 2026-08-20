@@ -95,17 +95,18 @@ and worth closing eventually.
 | Speech | **On-device Apple** (`SFSpeechRecognizer` + `AVSpeechSynthesizer`) | Free, private, no mid-call network dependency |
 | Trigger | **iMessage primary, FaceTime for interactive sessions** | Text-only mode is useful on its own and ships in v1 |
 | Cloud engine | `claude-opus-5`, adaptive thinking, `effort: high` | Developer task set. `claude-haiku-4-5` for the conversational voice thread |
-| Local engine | **Apple FoundationModels → Ollama escalation** | Private task set. Never leaves the Mac |
+| Local engine | **Apple FoundationModels** (~3B, on-device) | Private task set. Never leaves the Mac. Ollama was tried and removed — see §3 |
 | Routing | **Per-app rules** | Predictable, matches the two task sets, announced at session start |
 | Agent loop | Anthropic SDK beta **Tool Runner** | Per-turn hooks are where the confirmation gate belongs |
-| Form factor | **CLI now, signed menu-bar `.app` at v4** | Fastest iteration; permissions move once at the end |
+| Form factor | **Menu bar `.app` owning a Python daemon** | The app must hold the TCC grants, or they fall to Terminal and cover every script the user runs |
 | Session auth | **TOTP from phone**, independent of the login password | Expires in 30 s, so a leaked chat history is worthless; revocable without touching the Mac |
 | Lock handling | **Detect at session start, degrade gracefully** | The Mac may be locked or unlocked depending on where you are |
 
 ### Verified on the target machine (MacBook Air M2, 16 GB, macOS 26.3.1)
 
 - `FoundationModels.framework` present; Apple Intelligence opted in → on-device LLM available
-- No Ollama / llama.cpp / MLX yet
+- Ollama was wired in, measured, and removed: the on-device model with typed
+  tools beat it, and a 5 GB download contradicted the free tier's pitch
 - **Disk is the binding constraint: 29 GiB free of 228.** A 7–8B model at Q4 ≈ 5 GB, a 14B ≈ 9 GB.
   RAM is not the limit; disk is
 - No `pyobjc` — reinforces putting Accessibility and lock-state detection in the Swift helpers
@@ -165,38 +166,65 @@ in a text. You should never be unsure whether a document just left your machine.
 ## 4. System architecture
 
 ```
-  iPhone                              MacBook Air (M2, macOS 26.3)
-  ──────                              ────────────────────────────
+  iPhone                        MacBook Air (M2, macOS 26.3)
+  ──────                        ────────────────────────────
 
-  iMessage ──────────────────────►  chat.db poller ──┐
-                                                     │
-  FaceTime ──── audio in ────────►  FaceTime.app     │
-           ◄─── audio out ────────      │  ▲         │
-           ◄─── video (screen) ───      │  │         ▼
-                                        │  │    ┌─────────────┐
-                        process tap ────┘  │    │  Supervisor │
-                              │            │    │  + auth     │
-                              ▼            │    └──────┬──────┘
-                        VAD → STT ─────────┼───────────┤
-                        TTS → BlackHole ───┘           ▼
-                                              ┌────────────────┐
-  ScreenCaptureKit → vcam ──► FaceTime        │ ROUTER (local) │
-                                              └───┬────────┬───┘
-                                       Set A ─────┘        └───── Set B
-                                          ▼                          ▼
-                            ┌──────────────────────┐      ┌──────────────────┐
-                            │ FoundationModels     │      │  claude-opus-5   │
-                            │   ↓ escalate         │      │  (Tool Runner)   │
-                            │ Ollama 7–14B         │      └────────┬─────────┘
-                            └──────────┬───────────┘               │
-                                       └───────────┬───────────────┘
-                                                   ▼
-                          ┌──────────────────────────────────────────┐
-                          │ bash · applescript · ui_query/ui_click   │
-                          │ screenshot · computer · shortcuts        │
-                          └──────────────────┬───────────────────────┘
-                                  guard.py ──┘  audit.jsonl
+                    ┌───────────────────────────────────────────────┐
+                    │  MACman.app   — holds every TCC permission    │
+                    │  menu bar · settings · native consent dialog  │
+                    └───────────────────────┬───────────────────────┘
+                                            │ spawns as a CHILD
+                                            │ (JSON over pipes, no port)
+                                            ▼
+  iMessage ──────────────────►  chat.db poller ──┐
+                                                 │
+  FaceTime ─── audio in ─────►  FaceTime.app     │
+          ◄─── audio out ─────      │  ▲         ▼
+                                    │  │   ┌─────────────┐
+                    process tap ────┘  │   │  Supervisor │
+                          │            │   │  + auth     │
+                          ▼            │   └──────┬──────┘
+                    VAD → STT ─────────┼──────────┤
+                    TTS → BlackHole ───┘          ▼
+                                          ┌────────────────┐
+                                          │ ROUTER (local) │  never a
+                                          └───┬────────┬───┘  network call
+                                   Set A ─────┘        └───── Set B
+                                      ▼                          ▼
+                        ┌──────────────────────┐   ┌─────────────────────────┐
+                        │ FoundationModels     │   │ security/egress.py      │
+                        │ (~3B, on device)     │   │  ONE way data can leave │
+                        └──────────┬───────────┘   │  describe → authorise   │
+                                   │               └──────────┬──────────────┘
+                                   │                  ┌───────┴────────┐
+                                   │                  ▼                ▼
+                                   │          claude-opus-5      claude CLI
+                                   │          (Tool Runner)     (subscription)
+                                   ▼
+                  ┌──────────────────────────────────────────┐
+                  │ 18 typed primitives · bash · applescript │
+                  └──────────────────┬───────────────────────┘
+                          guard.py ──┘  audit.jsonl
 ```
+
+Three properties of this shape are load-bearing:
+
+**The daemon is a child of the app.** macOS attributes a permission to the
+*responsible process*, so a daemon started from Terminal makes MACman's Full
+Disk Access belong to Terminal — and therefore to every script the user will
+ever run in a shell. As a child of `MACman.app`, the grant belongs to MACman
+alone and can be revoked on its own. A LaunchAgent would undo this: the
+responsible process becomes `launchd` and the permission attaches to a bare
+binary with no bundle.
+
+**Nothing binds a port.** The app owns the daemon's pipes because it is the
+parent, so IPC is newline-delimited JSON over stdio. An earlier design served a
+local web UI, which needed a token, an origin check and a DNS-rebinding
+defence to reach the same place this gets for free.
+
+**There is one exit.** Every byte bound for a cloud model passes through
+`security/egress.py`, and an audit fails if any other module imports the
+Anthropic SDK or locates the `claude` CLI.
 
 ---
 
@@ -346,6 +374,46 @@ boundary determines how much of Set A works headless, and it's cheap to measure.
 | **Credential isolation** | `bash` runs with `ANTHROPIC_API_KEY` scrubbed. Reads of `.env`, `~/.ssh`, `~/.aws`, keychain denied at the tool layer, not by prompting |
 | **Audit log** | `audit.jsonl` — every tool call, args, result hash, timestamp, session id, **and which engine ran it**. Append-only |
 | **Kill switch** | Global hotkey, `STOP` over iMessage, and hanging up all halt the work thread |
+| **Egress gate** | `security/egress.py` — the single place data can leave. Describes exactly what would go, asks, records. An audit fails if any other module reaches a cloud model |
+| **Permission ownership** | `MACman.app` holds the TCC grants and spawns the daemon as a child, so Full Disk Access belongs to MACman rather than to Terminal |
+
+### 6.5 The egress gate
+
+The privacy claim is only as strong as the number of places able to break it,
+so there is one. Everything bound for a cloud model is described, authorised
+and recorded in `security/egress.py`.
+
+A `Disclosure` is plain data, which is what lets the same object render as a
+native dialog, a text message, a spoken sentence and an audit line without
+being built four times and drifting apart.
+
+**Two kinds of truth, distinguished in the type system.** `Precision.EXACT`
+means MACman assembled the payload and can name every byte. `Precision.SCOPE`
+means it cannot — either because Claude Code reads files on its own, or because
+the Tool Runner sends tool *results* back and the model chooses which tools to
+run. Rendering a SCOPE disclosure as though it were EXACT would be a lie of
+precision: a tidy list of three files where the honest answer is "anything in
+this project". Both senders are SCOPE.
+
+**Exclusions must be guaranteed, not aspirational.** Saying "your Documents are
+not sent" would be false for the cloud engine, since a `bash` call can read a
+document and the result goes back. `excluded` therefore names only what is
+refused in code — the credential paths — and an audit check fails if that list
+grows to cover folders MACman cannot actually guarantee.
+
+**It fails closed three ways.** No asker means nobody is present to consent, so
+it refuses rather than proceeding. `send` requires an `Authorisation` receipt
+that only `authorise` issues, making a forgotten question a `TypeError` rather
+than a silent disclosure. And `guard()` re-checks the receipt against the
+payload immediately before sending, so an approved disclosure cannot be swapped
+for another.
+
+**Pre-approvals are deliberately hard to make generous:** a category *and* a
+path prefix, never a blanket allow, with an expiry — consent granted once and
+never revisited becomes a setting nobody remembers choosing. Path matching uses
+`security/paths.within`, shared with the credential denylist, because the naive
+version is wrong in both directions on macOS: `~/.SSH` is the same directory as
+`~/.ssh`, and `~/projects` is a string prefix of `~/projects-secret`.
 
 **Dangerous-action list (v1):** `sudo`, `rm -rf`, `diskutil`, `dd`, `security`/keychain,
 `defaults delete`, `curl | sh`, purchases and payment flows, mail or messages to a recipient not
@@ -464,7 +532,7 @@ MACMan/
 │   ├── router.py               # LOCAL classification, never a cloud call
 │   ├── engines/
 │   │   ├── cloud.py            # Tool Runner on claude-opus-5
-│   │   └── local.py            # FoundationModels → Ollama escalation
+│   │   └── local.py            # FoundationModels, typed tools
 │   ├── agent/
 │   │   ├── prompts.py  guard.py
 │   │   └── tools/              # shell, applescript, ui, screen, computer, shortcuts

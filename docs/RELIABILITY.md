@@ -24,6 +24,7 @@ in another on identical inputs.
 | Accessibility navigation | **50%** — not used in production |
 | **Outbound connections, private task** | **0** — audited, Python *and* Swift |
 | **Adversarial attacks resisted** | **23/23** — after one real leak was found and fixed |
+| **Egress gate checks held** | **21/21** — nothing reaches a cloud model unasked |
 | Shell command authoring | **20%** — not offered to this model |
 
 **What MACman actually ships on:** typed tools with validated arguments. The
@@ -372,6 +373,39 @@ savings` stays a task.
 .venv/bin/python tests/tasks/spoken_code.py --audio   # what the recogniser emits
 ```
 
+## The one exit — 21/21
+
+Every byte bound for a cloud model passes through `security/egress.py`, and the
+audit attacks that gate rather than asserting it (`tests/audit/egress.py`).
+
+| Attack class | Checks | Held |
+|---|---|---|
+| The consent gate itself | 5 | 5 |
+| Pre-approval scoping | 7 | 7 |
+| Receipt reuse | 2 | 2 |
+| Bypassing the gate entirely | 1 | 1 |
+| Wiring — do the senders really refuse? | 6 | 6 |
+
+The checks worth naming, because each encodes a mistake that would otherwise be
+easy to make:
+
+* **`~/projects` must not cover `~/projects-secret`.** String prefixes match
+  unrelated siblings; the check compares path components and identity.
+* **`~/Projects` must cover `~/projects`.** macOS is case-insensitive, so a
+  rule that stops working when the user capitalises differently is a bug in the
+  other direction.
+* **A receipt cannot be reused for different data.** Approving *this* is not
+  approving *something like it*.
+* **An expired pre-approval is dead**, and a task with no path matches no
+  directory-scoped rule.
+
+**The wiring checks drive the real code paths** with an asker that always
+refuses, rather than grepping for the word `egress` — an import that is never
+called would pass a grep. Two of them exist to stop the disclosure becoming
+dishonest over time: one fails if the cloud disclosure is ever marked `EXACT`
+when it cannot be, and one fails if `excluded` grows to name folders MACman
+cannot actually guarantee.
+
 ## Attacked, not asserted — 23/23
 
 Every security property here was a *claim* until it was attacked
@@ -493,6 +527,44 @@ packages sitting in the development environment (`CoreServices`, `FSEvents`)
 are orphans from an earlier dependency set and belong to no tier. The real
 number is better than the one being advertised, which is exactly why it went
 unquestioned for as long as it did.
+
+### The app bundle
+
+`MACman.app` carries its own Python, the daemon and the Swift helpers, so it
+depends on nothing in the user's environment. macOS ships Python 3.9 and the
+daemon needs 3.11 for `tomllib`; depending on a Homebrew Python would break the
+app the day the user upgrades it.
+
+| | |
+|---|---|
+| Runtime, as downloaded | 108 MB |
+| After trimming | **68 MB** |
+| Bundle total | **70 MB** |
+| Modules verified importable from the bundle | **34/34** |
+
+The two largest savings were not the obvious ones. **`PyObjCTest` is 16 MB** —
+pyobjc ships its own test suite inside the wheel — and **`pip` is 11 MB**, with
+no use once the bundle is built. Tcl/Tk, IDLE and the C headers followed.
+
+Trimming stopped at whole directories that no import path reaches. Going
+module-by-module through the stdlib saves a few more megabytes and risks an
+`ImportError` that appears on someone else's Mac months later, which is a poor
+trade for a tool asking to be trusted.
+
+Because that trim list is hand-written, **the build imports all 34 modules the
+daemon can reach** from the bundled interpreter with the repository's
+`site-packages` excluded. A bad trim fails the build rather than shipping.
+
+The runtime is pinned by URL and SHA256 and refuses to embed on a mismatch: it
+runs with whatever permissions the user grants MACman, so it is the same class
+of supply-chain surface as the packages below.
+
+> **A bug worth recording:** the first attempt to pin a runtime selected the
+> *freethreaded* (no-GIL) build, because the code took `sorted(...)[0]` and
+> "freethreaded" sorts first. pyobjc publishes no freethreaded wheels, so the
+> dependency install would have failed after a 30 MB download for a reason
+> nothing in the output explained. Selection is now an exact match that refuses
+> unless it finds exactly one candidate.
 
 ### Pinned by hash
 

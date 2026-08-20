@@ -32,8 +32,29 @@ we can engineer away — it is where Apple put the data.
 
 The consequence: **every one of the 11 Python packages MACman installs runs
 with those permissions too.** That is why the dependency list is pinned by hash
-and justified line by line (`requirements.lock`), and why the free tier
-deliberately has no cloud SDK in it.
+and justified line by line (`requirements.lock`), why the embedded Python
+runtime is pinned by SHA256 as well, and why the free tier deliberately has no
+cloud SDK in it.
+
+### You grant them to MACman, not to your Terminal
+
+This changed, and it is the single largest security improvement the project has
+made.
+
+macOS attributes a permission to the **responsible process** — the app that
+launched the one asking. Running the daemon from a terminal meant Full Disk
+Access had to be granted to **Terminal itself**, which does not give it to
+MACman: it gives it to *every script you will ever run in a shell*, forever,
+including ones you have not written yet.
+
+`MACman.app` now spawns the daemon as a child, so the grant belongs to MACman
+alone. It appears under its own name in System Settings, and revoking it there
+affects nothing else. Verified on this Mac: Full Disk Access granted to the app
+reaches the child daemon, and the daemon runs with the app as its direct parent.
+
+A LaunchAgent would undo this — the responsible process becomes `launchd` and
+the permission attaches to a bare binary with no bundle — which is why the
+daemon must stay a child, and why **quitting the app stops MACman**.
 
 Check what is granted, and turn any of it off:
 
@@ -165,14 +186,30 @@ destructive things and then comply. There is no second opinion.
 
 ### 6. The cloud tier, if you enable it
 
-If you install `[cloud]`, configure a key, and a task routes to Claude, **that
-content goes to Anthropic** under their terms. The router tries to keep personal
-things local and measured 20/20 doing so — but that is a heuristic over phrasings
-we thought of. A wording nobody anticipated could route somewhere you did not
+If you install `[cloud]`, configure a key, and approve a task, **that content
+goes to Anthropic** under their terms. The router tries to keep personal things
+local and measured 20/20 doing so — but that is a heuristic over phrasings we
+thought of. A wording nobody anticipated could route somewhere you did not
 intend.
 
-The free tier has no cloud SDK installed at all, which is a stronger guarantee
-than any routing rule.
+Since the egress gate, that risk is bounded rather than merely mitigated:
+**nothing reaches a cloud model without a disclosure you approved**, so a
+mis-routed task becomes a question rather than a leak. What the gate cannot do
+is make the disclosure smarter than the code producing it.
+
+Two honest limits worth knowing:
+
+* **A cloud task can still read your files.** The disclosure says so — it warns
+  that whatever Claude looks up is sent too — but "the request" is not the
+  whole payload. A `bash` call that reads a document sends that document.
+* **Claude Code is not governed by MACman at all.** Handing a task to the
+  `claude` CLI starts a separate program running with your account's access.
+  MACman's credential blocks, guard and audit log apply to *MACman's* tools,
+  not to it. The disclosure states this outright rather than implying
+  protection that does not exist.
+
+The free tier has no cloud SDK installed at all, which remains a stronger
+guarantee than any gate or routing rule.
 
 ### 7. Other software on your Mac
 
@@ -207,6 +244,7 @@ Do not take the claims above on trust; they are all reproducible.
 
 ```bash
 .venv/bin/python tests/audit/injection.py   # attack the defences — any PASS is a break
+.venv/bin/python tests/audit/egress.py      # can data leave without you agreeing?
 .venv/bin/python tests/audit/network.py     # count outbound connections
 .venv/bin/python -m macman.main preflight   # what permissions are actually granted
 ```
