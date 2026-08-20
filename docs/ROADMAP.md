@@ -197,7 +197,7 @@ everything."
 | 🤖 | 4 | Permissions cleanup guide — Claude.app, Terminal, MACman.app | ✅ |
 | 👤 | 5 | Fresh install in a second macOS account | 🔬 checklist ready, yours to run |
 | 🤖 | 6 | Homebrew cask, version single-sourced, release tooling | ✅ *(publishing is yours)* |
-| 🤖 | 7 | Final re-scored evaluation | ⬜ next |
+| 🤖 | 7 | Final re-scored evaluation | ✅ [EVALUATION.md](EVALUATION.md) — 6/10 |
 
 **Step 1 — the poller.** The serve loop runs on a worker thread inside the
 bridge. Three things must hold:
